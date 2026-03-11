@@ -1,0 +1,27 @@
+name: wunderbarai
+description: "A Flutter project with provider-based theme switching."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.0.5
+  http: ^0.13.6
+  flutter_tts: ^4.2.2
+  speech_to_text: ^7.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - lib/assets/Bakery.png
+    - lib/assets/RailwayStation.png
+    - lib/assets/Restaurant.png
