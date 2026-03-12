@@ -16,3 +16,4 @@ lib/
 │
 ├── main.dart           # App entry point
 └── app.dart            # Main MaterialApp configuration
+

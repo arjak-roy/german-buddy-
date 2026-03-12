@@ -12,6 +12,28 @@ class SpeechCaptureResult {
 
 class SpeechProvider extends ChangeNotifier {
   final SpeechToText _speech = SpeechToText();
+  static const String _wakeWord = 'buddy';
+  static const Set<String> _buddyDirectVariants = {
+    'buddy',
+    'budi',
+    'budy',
+    'buddi',
+    'baddi',
+    'bady',
+    'body',
+    'bodi',
+    'buddyy',
+    'budde',
+  };
+  static const Map<String, String> _defaultWordCorrections = {
+    'gutun': 'guten',
+    'guuten': 'guten',
+    'gutan': 'guten',
+    'tage': 'tag',
+    'tak': 'tag',
+    'dankee': 'danke',
+    'bitteh': 'bitte',
+  };
 
   bool _initialized = false;
   bool _speechReady = false;
@@ -32,6 +54,8 @@ class SpeechProvider extends ChangeNotifier {
   SpeechLanguage _language = SpeechLanguage.german;
   String _germanLocaleId = 'de_DE';
   String _englishLocaleId = 'en_US';
+  final Map<String, String> _wordCorrections =
+      Map<String, String>.from(_defaultWordCorrections);
 
   bool get speechReady => _speechReady;
   bool get isListening => _isListening;
@@ -109,6 +133,37 @@ class SpeechProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setWordCorrections(Map<String, String> corrections) {
+    _wordCorrections
+      ..clear()
+      ..addEntries(
+        corrections.entries.map(
+          (entry) => MapEntry(
+            entry.key.trim().toLowerCase(),
+            entry.value.trim().toLowerCase(),
+          ),
+        ),
+      );
+    notifyListeners();
+  }
+
+  void addWordCorrections(Map<String, String> corrections) {
+    for (final entry in corrections.entries) {
+      final key = entry.key.trim().toLowerCase();
+      final value = entry.value.trim().toLowerCase();
+      if (key.isEmpty || value.isEmpty) continue;
+      _wordCorrections[key] = value;
+    }
+    notifyListeners();
+  }
+
+  void resetWordCorrections() {
+    _wordCorrections
+      ..clear()
+      ..addAll(_defaultWordCorrections);
+    notifyListeners();
+  }
+
   Future<bool> startListening() async {
     if (!_speechReady || _isListening) return false;
 
@@ -134,7 +189,7 @@ class SpeechProvider extends ChangeNotifier {
       onResult: (result) {
         final words = result.recognizedWords.trim();
         if (words.isNotEmpty) {
-          _recognized = words;
+          _recognized = _postProcessTranscript(words);
           _lastResultAt = DateTime.now();
           if (result.hasConfidenceRating) {
             final c = result.confidence;
@@ -142,7 +197,7 @@ class SpeechProvider extends ChangeNotifier {
             _lastConfidence = (c > 0.0 && c <= 1.0) ? c : null;
           }
           if (result.finalResult) {
-            _finalRecognized = words;
+            _finalRecognized = _postProcessTranscript(words);
           }
           notifyListeners();
         }
@@ -178,13 +233,16 @@ class SpeechProvider extends ChangeNotifier {
   }
 
   Future<SpeechCaptureResult?> stopListeningAndCollect() async {
-    if (!_isListening) return null;
-
-    await _speech.stop();
+    final wasListening = _isListening;
+    if (wasListening) {
+      await _speech.stop();
+    }
     await _waitForTrailingResults();
 
     _isListening = false;
-    _lastStatus = 'stopped';
+    if (wasListening) {
+      _lastStatus = 'stopped';
+    }
     _voiceLevel = 0.0;
     notifyListeners();
 
@@ -193,6 +251,100 @@ class SpeechProvider extends ChangeNotifier {
     if (text.isEmpty) return null;
 
     return SpeechCaptureResult(text: text, confidence: _lastConfidence);
+  }
+
+  void clearTranscript() {
+    _recognized = '';
+    _finalRecognized = '';
+    _lastConfidence = null;
+    notifyListeners();
+  }
+
+  String _postProcessTranscript(String text) {
+    if (text.trim().isEmpty) return text;
+
+    final tokens = text.split(RegExp(r'\s+'));
+    final normalized = <String>[];
+
+    for (final token in tokens) {
+      final mapped = _normalizeToken(token);
+      normalized.add(mapped);
+    }
+
+    return normalized.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _normalizeToken(String token) {
+    final core = token.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    if (core.isEmpty) return token;
+
+    final lowerCore = core.toLowerCase();
+    final correctedWord = _wordCorrections[lowerCore];
+    if (correctedWord != null) {
+      final replacement = _applyOriginalCasePattern(
+        source: core,
+        replacement: correctedWord,
+      );
+      return token.replaceFirst(core, replacement);
+    }
+
+    final isBuddy = _buddyDirectVariants.contains(lowerCore) ||
+        _levenshtein(lowerCore, _wakeWord) <= 1;
+    if (!isBuddy) return token;
+
+    final replacement = _applyOriginalCasePattern(
+      source: core,
+      replacement: _wakeWord,
+    );
+
+    return token.replaceFirst(core, replacement);
+  }
+
+  String _applyOriginalCasePattern({
+    required String source,
+    required String replacement,
+  }) {
+    final isAllUpper = source == source.toUpperCase();
+    if (isAllUpper) return replacement.toUpperCase();
+
+    final isCapitalized = RegExp(r'^[A-Z]').hasMatch(source);
+    if (!isCapitalized) return replacement;
+
+    return replacement[0].toUpperCase() + replacement.substring(1);
+  }
+
+  int _levenshtein(String a, String b) {
+    if (a == b) return 0;
+    if (a.isEmpty) return b.length;
+    if (b.isEmpty) return a.length;
+
+    final rows = a.length + 1;
+    final cols = b.length + 1;
+    final dist = List<List<int>>.generate(
+      rows,
+      (_) => List<int>.filled(cols, 0),
+    );
+
+    for (var i = 0; i < rows; i++) {
+      dist[i][0] = i;
+    }
+    for (var j = 0; j < cols; j++) {
+      dist[0][j] = j;
+    }
+
+    for (var i = 1; i < rows; i++) {
+      for (var j = 1; j < cols; j++) {
+        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
+        final deletion = dist[i - 1][j] + 1;
+        final insertion = dist[i][j - 1] + 1;
+        final substitution = dist[i - 1][j - 1] + cost;
+        dist[i][j] = [deletion, insertion, substitution].reduce(
+          (minValue, next) => next < minValue ? next : minValue,
+        );
+      }
+    }
+
+    return dist[a.length][b.length];
   }
 
   Future<void> cancelListening() async {

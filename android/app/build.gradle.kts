@@ -42,3 +42,8 @@ android {
 flutter {
     source = "../.."
 }
+
+// Work around intermittent Windows file-lock issues in AGP clean task.
+tasks.matching { it.name == "cleanMergeDebugAssets" }.configureEach {
+    enabled = false
+}

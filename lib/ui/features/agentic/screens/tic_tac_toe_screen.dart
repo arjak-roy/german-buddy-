@@ -1,9 +1,9 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:provider/provider.dart';
+import 'package:confetti/confetti.dart';
 
+import '../../../../data/services/gemini_service.dart';
 import '../../../../providers/speech_provider.dart';
 import '../../../shared/widgets/speech_action_bar.dart';
 
@@ -30,9 +30,11 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
 
   final List<String> _board = List<String>.filled(9, '');
   final List<_TicTacToeMessage> _messages = <_TicTacToeMessage>[];
-  final Random _random = Random();
+  final GeminiService _gemini = GeminiService();
   late final FlutterTts _tts;
+  late final ConfettiController _confettiController;
   bool _gameOver = false;
+  bool _isResolvingTurn = false;
   String _status = 'Say a move like top left or oben links.';
   String? _winner;
 
@@ -43,10 +45,14 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
     _tts.setPitch(1.0);
     _tts.setSpeechRate(0.45);
     _tts.awaitSpeakCompletion(false);
+    _confettiController = ConfettiController(
+      duration: const Duration(milliseconds: 1800),
+    );
     _messages.add(
       const _TicTacToeMessage(
         text:
             'Welcome. Say top left, center, unten rechts, or reset to play Tic-Tac-Toe.',
+        translated: 'Welcome. Say top left, center, bottom right, or reset to play Tic-Tac-Toe.',
         isUser: false,
       ),
     );
@@ -59,6 +65,7 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
   @override
   void dispose() {
     _tts.stop();
+    _confettiController.dispose();
     super.dispose();
   }
 
@@ -70,18 +77,82 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       _messages.add(_TicTacToeMessage(text: command, isUser: true));
     });
 
-    final normalized = _normalize(command);
-
-    if (_matchesAny(normalized, const ['reset', 'restart', 'new game'])) {
-      _resetGame();
+    if (_isResolvingTurn) {
+      await _respond(
+        _isGermanUi(context)
+            ? 'Einen Moment, ich verarbeite noch den letzten Zug.'
+            : 'One moment, I am still processing the previous turn.',
+        englishTranslation: 'One moment, I am still processing the previous turn.',
+      );
       return;
     }
 
-    if (_matchesAny(normalized, const ['hilfe', 'help', 'anleitung'])) {
+    setState(() {
+      _isResolvingTurn = true;
+    });
+
+    try {
+      final turnPlan = await _gemini.planTicTacToeTurn(
+        userUtterance: command,
+        board: List<String>.from(_board),
+        isGameOver: _gameOver,
+        winner: _winner,
+        isGerman: _isGermanUi(context),
+      );
+
+      await _applyTurnPlan(turnPlan);
+    } catch (_) {
       await _respond(
         _isGermanUi(context)
-            ? 'Sage oben links, mitte, unten rechts oder eine Zahl von eins bis neun. Du bist X.'
-            : 'Say top left, center, bottom right, or a number from one to nine. You are X.',
+            ? 'Ich konnte den Zug gerade nicht verarbeiten. Versuche es bitte noch einmal.'
+            : 'I could not process that turn right now. Please try again.',
+        englishTranslation:
+            'I could not process that turn right now. Please try again.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResolvingTurn = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _applyTurnPlan(TicTacToeTurnPlan plan) async {
+    final action = plan.action.trim().toLowerCase();
+
+    if (action == 'reset_game') {
+      _resetGame(
+        customStatus: plan.spokenResponse,
+        customEnglishTranslation: plan.englishTranslation,
+      );
+      return;
+    }
+
+    if (action == 'help') {
+      await _respond(
+        plan.spokenResponse.isNotEmpty
+            ? plan.spokenResponse
+            : (_isGermanUi(context)
+                ? 'Sage zum Beispiel oben links, mitte, unten rechts oder reset.'
+                : 'Say for example top left, center, bottom right, or reset.'),
+        englishTranslation: plan.englishTranslation.isNotEmpty
+            ? plan.englishTranslation
+            : 'Say for example top left, center, bottom right, or reset.',
+      );
+      return;
+    }
+
+    if (action != 'player_move') {
+      await _respond(
+        plan.spokenResponse.isNotEmpty
+            ? plan.spokenResponse
+            : (_isGermanUi(context)
+                ? 'Ich habe den Zug nicht verstanden. Bitte buchstabiere es korrekt.'
+                : 'I did not understand that move. Please spell it correctly.'),
+        englishTranslation: plan.englishTranslation.isNotEmpty
+            ? plan.englishTranslation
+            : 'I did not understand that move. Please spell it correctly.',
       );
       return;
     }
@@ -91,35 +162,28 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
         _isGermanUi(context)
             ? 'Das Spiel ist vorbei. Sage reset für eine neue Runde.'
             : 'The game is over. Say reset for a new round.',
+        englishTranslation: 'The game is over. Say reset for a new round.',
       );
       return;
     }
 
-    final move = _parseMove(normalized);
-    if (move == null) {
+    final playerMove = plan.playerMoveIndex;
+    if (playerMove == null || !_isLegalMove(playerMove)) {
       await _respond(
-        _isGermanUi(context)
-            ? 'Ich habe den Zug nicht verstanden. Versuche oben links, mitte oder Feld fünf.'
-            : 'I did not understand that move. Try top left, center, or square five.',
+        plan.spokenResponse.isNotEmpty
+            ? plan.spokenResponse
+            : (_isGermanUi(context)
+                ? 'Bitte nenne ein freies Feld von eins bis neun.'
+                : 'Please name a free square from one to nine.'),
+        englishTranslation: plan.englishTranslation.isNotEmpty
+            ? plan.englishTranslation
+            : 'Please name a free square from one to nine.',
       );
       return;
     }
 
-    if (_board[move].isNotEmpty) {
-      await _respond(
-        _isGermanUi(context)
-            ? 'Dieses Feld ist schon belegt. Wähle ein anderes.'
-            : 'That square is already taken. Choose another one.',
-      );
-      return;
-    }
-
-    _applyPlayerMove(move);
-  }
-
-  void _applyPlayerMove(int index) {
     setState(() {
-      _board[index] = _playerMark;
+      _board[playerMove] = _playerMark;
     });
 
     final playerWin = _findWinner();
@@ -133,10 +197,12 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       return;
     }
 
-    final agentMove = _chooseAgentMove();
-    setState(() {
-      _board[agentMove] = _agentMark;
-    });
+    final assistantMove = _resolveAssistantMove(plan.assistantMoveIndex);
+    if (assistantMove != null) {
+      setState(() {
+        _board[assistantMove] = _agentMark;
+      });
+    }
 
     final agentWin = _findWinner();
     if (agentWin != null) {
@@ -149,18 +215,144 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       return;
     }
 
-    final cellName = _localizedCellName(
-      agentMove,
-      german: _isGermanUi(context),
-    );
-    _respond(
-      _isGermanUi(context)
-          ? 'Ich spiele $cellName. Du bist dran.'
-          : 'I play $cellName. Your turn.',
+    await _respond(
+      plan.spokenResponse.isNotEmpty
+          ? plan.spokenResponse
+          : (_isGermanUi(context)
+              ? 'Ich habe meinen Zug gemacht. Du bist dran.'
+              : 'I made my move. Your turn.'),
+      englishTranslation: plan.englishTranslation.isNotEmpty
+          ? plan.englishTranslation
+          : 'I made my move. Your turn.',
     );
   }
 
-  void _finishGame(String winner) {
+  Future<void> _handleBoardTap(int index) async {
+    if (_gameOver || _board[index].isNotEmpty) return;
+
+    if (_isResolvingTurn) {
+      await _respond(
+        _isGermanUi(context)
+            ? 'Einen Moment, ich verarbeite noch den letzten Zug.'
+            : 'One moment, I am still processing the previous turn.',
+        englishTranslation: 'One moment, I am still processing the previous turn.',
+      );
+      return;
+    }
+
+    final utterance = _isGermanUi(context)
+        ? 'Ich spiele Feld ${index + 1}'
+        : 'I play square ${index + 1}';
+
+    setState(() {
+      _messages.add(_TicTacToeMessage(text: utterance, isUser: true));
+      _isResolvingTurn = true;
+    });
+
+    try {
+      final plan = await _gemini.planTicTacToeTurn(
+        userUtterance: utterance,
+        board: List<String>.from(_board),
+        isGameOver: _gameOver,
+        winner: _winner,
+        isGerman: _isGermanUi(context),
+      );
+
+      await _applyTurnPlan(
+        TicTacToeTurnPlan(
+          action: 'player_move',
+          playerMoveIndex: index,
+          assistantMoveIndex: plan.assistantMoveIndex,
+          spokenResponse: plan.spokenResponse,
+          englishTranslation: plan.englishTranslation,
+        ),
+      );
+    } catch (_) {
+      await _applyTurnPlan(
+        TicTacToeTurnPlan(
+          action: 'player_move',
+          playerMoveIndex: index,
+          assistantMoveIndex: null,
+          spokenResponse: _isGermanUi(context)
+              ? 'Ich habe deinen Zug gesetzt. Du bist dran.'
+              : 'I placed your move. Your turn.',
+          englishTranslation: 'I placed your move. Your turn.',
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResolvingTurn = false;
+        });
+      }
+    }
+  }
+
+  bool _isLegalMove(int index) {
+    return index >= 0 && index < _board.length && _board[index].isEmpty;
+  }
+
+  int? _resolveAssistantMove(int? plannedMove) {
+    if (plannedMove != null && _isLegalMove(plannedMove)) {
+      return plannedMove;
+    }
+
+    final winningMove = _findStrategicMove(_agentMark);
+    if (winningMove != null) return winningMove;
+
+    final blockingMove = _findStrategicMove(_playerMark);
+    if (blockingMove != null) return blockingMove;
+
+    if (_isLegalMove(4)) return 4;
+
+    for (final preferred in const [0, 2, 6, 8, 1, 3, 5, 7]) {
+      if (_isLegalMove(preferred)) return preferred;
+    }
+
+    return null;
+  }
+
+  int? _findStrategicMove(String mark) {
+    for (final line in _winningLines) {
+      final values = line.map((index) => _board[index]).toList();
+      final markCount = values.where((value) => value == mark).length;
+      final emptyCount = values.where((value) => value.isEmpty).length;
+      if (markCount == 2 && emptyCount == 1) {
+        return line.firstWhere((index) => _board[index].isEmpty);
+      }
+    }
+    return null;
+  }
+
+  String _squarePhrase(int index, {required bool german}) {
+    const english = <String>[
+      'top left',
+      'top center',
+      'top right',
+      'middle left',
+      'center',
+      'middle right',
+      'bottom left',
+      'bottom center',
+      'bottom right',
+    ];
+    const germanPhrases = <String>[
+      'oben links',
+      'oben mitte',
+      'oben rechts',
+      'mitte links',
+      'mitte',
+      'mitte rechts',
+      'unten links',
+      'unten mitte',
+      'unten rechts',
+    ];
+    return german ? germanPhrases[index] : english[index];
+  }
+
+  void _finishGame(
+    String winner,
+  ) {
     final german = winner == _playerMark
         ? 'Du gewinnst. Sage reset für ein neues Spiel.'
         : 'Ich gewinne. Sage reset für ein neues Spiel.';
@@ -174,7 +366,14 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       _status = winner == _playerMark ? 'You win.' : 'Agent wins.';
     });
 
-    _respond(_isGermanUi(context) ? german : english);
+    if (winner == _playerMark) {
+      _confettiController.play();
+    }
+
+    _respond(
+      _isGermanUi(context) ? german : english,
+      englishTranslation: english,
+    );
   }
 
   void _finishDraw() {
@@ -188,28 +387,45 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       _isGermanUi(context)
           ? 'Unentschieden. Sage reset für ein neues Spiel.'
           : 'Draw. Say reset for a new game.',
+      englishTranslation: 'Draw. Say reset for a new game.',
     );
   }
 
-  void _resetGame() {
+  void _resetGame({
+    String? customStatus,
+    String? customEnglishTranslation,
+  }) {
     setState(() {
       for (var index = 0; index < _board.length; index++) {
         _board[index] = '';
       }
       _gameOver = false;
       _winner = null;
-      _status = _isGermanUi(context)
-          ? 'Neues Spiel. Du beginnst als X.'
-          : 'New game. You start as X.';
+      _status = customStatus?.isNotEmpty == true
+          ? customStatus!
+          : (_isGermanUi(context)
+              ? 'Neues Spiel. Du beginnst als X.'
+              : 'New game. You start as X.');
     });
 
-    _respond(_status);
+    _respond(
+      _status,
+      englishTranslation: customEnglishTranslation?.isNotEmpty == true
+          ? customEnglishTranslation!
+          : 'New game. You start as X.',
+    );
   }
 
-  Future<void> _respond(String text) async {
+  Future<void> _respond(String text, {String? englishTranslation}) async {
     if (!mounted) return;
     setState(() {
-      _messages.add(_TicTacToeMessage(text: text, isUser: false));
+      _messages.add(
+        _TicTacToeMessage(
+          text: text,
+          translated: englishTranslation,
+          isUser: false,
+        ),
+      );
       _status = text;
     });
     await _speakLatestAssistantMessage();
@@ -231,48 +447,6 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
     }
   }
 
-  int _chooseAgentMove() {
-    final winning = _findStrategicMove(_agentMark);
-    if (winning != null) return winning;
-
-    final blocking = _findStrategicMove(_playerMark);
-    if (blocking != null) return blocking;
-
-    if (_board[4].isEmpty) return 4;
-
-    final corners = [
-      0,
-      2,
-      6,
-      8,
-    ].where((index) => _board[index].isEmpty).toList();
-    if (corners.isNotEmpty) {
-      return corners[_random.nextInt(corners.length)];
-    }
-
-    final available = _emptySquares();
-    return available[_random.nextInt(available.length)];
-  }
-
-  int? _findStrategicMove(String mark) {
-    for (final line in _winningLines) {
-      final values = line.map((index) => _board[index]).toList();
-      final markCount = values.where((value) => value == mark).length;
-      final emptyCount = values.where((value) => value.isEmpty).length;
-      if (markCount == 2 && emptyCount == 1) {
-        return line.firstWhere((index) => _board[index].isEmpty);
-      }
-    }
-    return null;
-  }
-
-  List<int> _emptySquares() {
-    return List<int>.generate(
-      _board.length,
-      (index) => index,
-    ).where((index) => _board[index].isEmpty).toList();
-  }
-
   String? _findWinner() {
     for (final line in _winningLines) {
       final a = _board[line[0]];
@@ -289,152 +463,19 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
     return _board.every((cell) => cell.isNotEmpty) && _findWinner() == null;
   }
 
-  int? _parseMove(String normalized) {
-    final directNumber = _parseNumber(normalized);
-    if (directNumber != null) return directNumber;
-
-    final compact = normalized.replaceAll(RegExp(r'[^a-z0-9 ]'), ' ');
-    if (compact.contains('center') ||
-        compact.contains('centre') ||
-        compact.contains('mitte')) {
-      return 4;
-    }
-
-    final hasTop = compact.contains('top') || compact.contains('oben');
-    final hasBottom = compact.contains('bottom') || compact.contains('unten');
-    final hasLeft = compact.contains('left') || compact.contains('links');
-    final hasRight = compact.contains('right') || compact.contains('rechts');
-
-    if (hasTop && hasLeft) return 0;
-    if (hasTop && hasRight) return 2;
-    if (hasBottom && hasLeft) return 6;
-    if (hasBottom && hasRight) return 8;
-    if (hasTop) return 1;
-    if (hasBottom) return 7;
-    if (hasLeft) return 3;
-    if (hasRight) return 5;
-
-    if (compact.contains('row one') || compact.contains('erste reihe')) {
-      if (compact.contains('column one') || compact.contains('erste spalte')) {
-        return 0;
-      }
-      if (compact.contains('column two') || compact.contains('zweite spalte')) {
-        return 1;
-      }
-      if (compact.contains('column three') ||
-          compact.contains('dritte spalte')) {
-        return 2;
-      }
-    }
-
-    if (compact.contains('row two') || compact.contains('zweite reihe')) {
-      if (compact.contains('column one') || compact.contains('erste spalte')) {
-        return 3;
-      }
-      if (compact.contains('column two') || compact.contains('zweite spalte')) {
-        return 4;
-      }
-      if (compact.contains('column three') ||
-          compact.contains('dritte spalte')) {
-        return 5;
-      }
-    }
-
-    if (compact.contains('row three') || compact.contains('dritte reihe')) {
-      if (compact.contains('column one') || compact.contains('erste spalte')) {
-        return 6;
-      }
-      if (compact.contains('column two') || compact.contains('zweite spalte')) {
-        return 7;
-      }
-      if (compact.contains('column three') ||
-          compact.contains('dritte spalte')) {
-        return 8;
-      }
-    }
-
-    return null;
-  }
-
-  int? _parseNumber(String normalized) {
-    const numbers = <String, int>{
-      '1': 0,
-      'one': 0,
-      'eins': 0,
-      '2': 1,
-      'two': 1,
-      'zwei': 1,
-      '3': 2,
-      'three': 2,
-      'drei': 2,
-      '4': 3,
-      'four': 3,
-      'vier': 3,
-      '5': 4,
-      'five': 4,
-      'fuenf': 4,
-      'funf': 4,
-      'fünf': 4,
-      '6': 5,
-      'six': 5,
-      'sechs': 5,
-      '7': 6,
-      'seven': 6,
-      'sieben': 6,
-      '8': 7,
-      'eight': 7,
-      'acht': 7,
-      '9': 8,
-      'nine': 8,
-      'neun': 8,
-    };
-
-    for (final entry in numbers.entries) {
-      if (RegExp(
-        '(^| )${RegExp.escape(entry.key)}( |\$)',
-      ).hasMatch(normalized)) {
-        return entry.value;
-      }
-    }
-    return null;
-  }
-
-  bool _matchesAny(String text, List<String> patterns) {
-    return patterns.any((pattern) => text.contains(pattern));
-  }
-
-  String _normalize(String text) {
-    return text.toLowerCase().replaceAll('ö', 'o').replaceAll('ü', 'u');
-  }
-
   bool _isGermanUi(BuildContext context) {
     return context.read<SpeechProvider>().isGerman;
   }
 
-  String _localizedCellName(int index, {required bool german}) {
-    const english = <int, String>{
-      0: 'top left',
-      1: 'top center',
-      2: 'top right',
-      3: 'middle left',
-      4: 'center',
-      5: 'middle right',
-      6: 'bottom left',
-      7: 'bottom center',
-      8: 'bottom right',
-    };
-    const germanMap = <int, String>{
-      0: 'oben links',
-      1: 'oben mitte',
-      2: 'oben rechts',
-      3: 'mitte links',
-      4: 'mitte',
-      5: 'mitte rechts',
-      6: 'unten links',
-      7: 'unten mitte',
-      8: 'unten rechts',
-    };
-    return german ? germanMap[index]! : english[index]!;
+  Future<void> _speakGermanHint(String text) async {
+    try {
+      await _tts.setLanguage('de-DE');
+      await _tts.setSpeechRate(0.4);
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (_) {
+      // Keep hints non-blocking even if TTS fails.
+    }
   }
 
   @override
@@ -455,17 +496,19 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
             onPressed: () => context.read<SpeechProvider>().toggleDebugPanel(),
           ),
           IconButton(
-            onPressed: _resetGame,
+            onPressed: () => _resetGame(),
             icon: const Icon(Icons.refresh_rounded),
             tooltip: isGerman ? 'Neustart' : 'Restart',
           ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
                   _StatusCard(
@@ -477,25 +520,37 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
                   const SizedBox(height: 16),
                   _Board(
                     board: _board,
-                    onTap: (index) {
-                      if (_gameOver || _board[index].isNotEmpty) return;
-                      _applyPlayerMove(index);
-                    },
+                    onTap: _handleBoardTap,
                   ),
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _HintChip(label: isGerman ? 'oben links' : 'top left'),
-                      _HintChip(label: isGerman ? 'mitte' : 'center'),
+                      ...List<Widget>.generate(9, (index) {
+                        final phrase = _squarePhrase(index, german: isGerman);
+                        return _HintChip(
+                          label: '${index + 1}. $phrase',
+                          onTap: isGerman
+                              ? () => _speakGermanHint('Feld ${index + 1}, $phrase')
+                              : null,
+                        );
+                      }),
                       _HintChip(
-                        label: isGerman ? 'unten rechts' : 'bottom right',
+                        label: isGerman ? 'reset' : 'reset',
+                        onTap: isGerman
+                            ? () => _speakGermanHint('reset')
+                            : null,
                       ),
-                      _HintChip(label: isGerman ? 'Feld 5' : 'square 5'),
-                      _HintChip(label: isGerman ? 'reset' : 'reset'),
                     ],
                   ),
+                  if (_isResolvingTurn) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      isGerman ? 'Gemini denkt...' : 'Gemini is thinking...',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   Text(
                     isGerman ? 'Spielverlauf' : 'Voice log',
@@ -506,14 +561,31 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
                     (message) => _VoiceLogBubble(message: message),
                   ),
                 ],
+                  ),
+                ),
+                SpeechActionBar(
+                  keyboardLabel: isGerman ? 'Zug eingeben' : 'Type a move',
+                  onSubmitted: _handleCommand,
+                ),
+              ],
+            ),
+          ),
+          IgnorePointer(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: _confettiController,
+                blastDirectionality: BlastDirectionality.explosive,
+                shouldLoop: false,
+                emissionFrequency: 0.05,
+                numberOfParticles: 24,
+                gravity: 0.2,
+                maxBlastForce: 28,
+                minBlastForce: 12,
               ),
             ),
-            SpeechActionBar(
-              keyboardLabel: isGerman ? 'Zug eingeben' : 'Type a move',
-              onSubmitted: _handleCommand,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -633,18 +705,26 @@ class _Board extends StatelessWidget {
 
 class _HintChip extends StatelessWidget {
   final String label;
+  final VoidCallback? onTap;
 
-  const _HintChip({required this.label});
+  const _HintChip({required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE2E8F0),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE2E8F0),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(label),
+        ),
       ),
-      child: Text(label),
     );
   }
 }
@@ -676,6 +756,20 @@ class _VoiceLogBubble extends StatelessWidget {
           ),
           child: Text(message.text),
         ),
+        if (!message.isUser && (message.translated?.trim().isNotEmpty ?? false))
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            constraints: const BoxConstraints(maxWidth: 320),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              message.translated!,
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            ),
+          ),
       ],
     );
   }
@@ -683,7 +777,12 @@ class _VoiceLogBubble extends StatelessWidget {
 
 class _TicTacToeMessage {
   final String text;
+  final String? translated;
   final bool isUser;
 
-  const _TicTacToeMessage({required this.text, required this.isUser});
+  const _TicTacToeMessage({
+    required this.text,
+    this.translated,
+    required this.isUser,
+  });
 }

@@ -10,6 +10,7 @@ class BuddyMicButton extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onLongPressStart;
   final VoidCallback? onLongPressEnd;
+  final VoidCallback? onLongPressCancel;
   final bool isRecording;
   final double voiceLevel;
   const BuddyMicButton({
@@ -17,6 +18,7 @@ class BuddyMicButton extends StatelessWidget {
     this.onLongPress,
     this.onLongPressStart,
     this.onLongPressEnd,
+    this.onLongPressCancel,
     this.isRecording = false,
     this.voiceLevel = 0.0,
     super.key,
@@ -30,6 +32,7 @@ class BuddyMicButton extends StatelessWidget {
       onLongPress: onLongPress,
       onLongPressStart: onLongPressStart,
       onLongPressEnd: onLongPressEnd,
+      onLongPressCancel: onLongPressCancel,
       isRecording: isRecording,
       voiceLevel: voiceLevel,
       showLabels: false,

@@ -10,6 +10,7 @@ class MicButton extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onLongPressStart;
   final VoidCallback? onLongPressEnd;
+  final VoidCallback? onLongPressCancel;
   final bool showLabels;
   final double diameter;
   final double iconSize;
@@ -22,6 +23,7 @@ class MicButton extends StatefulWidget {
     this.onLongPress,
     this.onLongPressStart,
     this.onLongPressEnd,
+    this.onLongPressCancel,
     this.showLabels = true,
     this.diameter = 120,
     this.iconSize = 48,
@@ -92,6 +94,7 @@ class _MicButtonState extends State<MicButton>
         onLongPress: widget.onLongPress,
         onLongPressStart: (_) => widget.onLongPressStart?.call(),
         onLongPressEnd: (_) => widget.onLongPressEnd?.call(),
+        onLongPressCancel: () => widget.onLongPressCancel?.call(),
         child: SizedBox(
           width: ringSize,
           height: ringSize,

@@ -7,6 +7,8 @@ import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/ai_provider.dart';
+import 'providers/pronunciation_analysis_provider.dart';
+import 'providers/pronunciation_recording_provider.dart';
 import 'providers/speech_provider.dart';
 import 'ui/features/auth/screens/login_screen.dart';
 import 'ui/features/home/screens/home_screen.dart';
@@ -31,6 +33,12 @@ class MainApp extends StatelessWidget {
         ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
         ChangeNotifierProvider<ChatProvider>(create: (_) => ChatProvider()),
         ChangeNotifierProvider<AiProvider>(create: (_) => AiProvider()),
+        ChangeNotifierProvider<PronunciationAnalysisProvider>(
+          create: (_) => PronunciationAnalysisProvider(),
+        ),
+        ChangeNotifierProvider<PronunciationRecordingProvider>(
+          create: (_) => PronunciationRecordingProvider(),
+        ),
         ChangeNotifierProvider<SpeechProvider>(create: (_) => SpeechProvider()),
       ],
       child: Consumer<ThemeProvider>(

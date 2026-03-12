@@ -105,6 +105,7 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
                     onTap: () => _toggleListening(context),
                     onLongPressStart: () => _startListening(context),
                     onLongPressEnd: () => _stopListeningAndSubmit(context),
+                    onLongPressCancel: () => _stopListeningAndSubmit(context),
                   ),
                   Column(
                     mainAxisSize: MainAxisSize.min,
@@ -258,6 +259,17 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
       await _stopListeningAndSubmit(context);
       return;
     }
+
+    // If recognition auto-stopped and words are still present, submit them
+    // before starting a new session so valid transcripts are not lost.
+    final pending = speech.currentTranscript.trim();
+    if (pending.isNotEmpty) {
+      await widget.onSubmitted(pending);
+      if (!mounted) return;
+      speech.clearTranscript();
+      return;
+    }
+
     await _startListening(context);
   }
 
@@ -284,6 +296,8 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
 
     if (text.isEmpty) return;
     await widget.onSubmitted(text);
+    if (!mounted) return;
+    speech.clearTranscript();
   }
 
   void _showInputSheet(BuildContext context) {

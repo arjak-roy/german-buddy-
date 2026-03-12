@@ -8,6 +8,7 @@ import '../widgets/resources_section.dart';
 import '../../buddy/screens/buddy_screen.dart';
 import '../../buddy/widgets/buddy_app_bar.dart';
 import '../../profile/screens/profile_screen.dart';
+import '../../pronunciation/screens/pronunciation_screen.dart';
 import '../../roleplay/screens/roleplay_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,6 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
       case 2:
         return const BuddyAppBar();
       case 3:
+        return AppBar(title: const Text('Pronunciation Lab'));
+      case 4:
         return AppBar(title: const Text('Profile'));
       default:
         return const HomeAppBar();
@@ -42,6 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
         // embedded version avoids nested scaffold
         return const BuddyScreen(embedded: true);
       case 3:
+        return const PronunciationScreen(embedded: true);
+      case 4:
         return const ProfileScreen();
       default:
         return _HomeContent(onMicTap: () => _onItemTapped(2));
@@ -62,31 +67,34 @@ class _HomeScreenState extends State<HomeScreen> {
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
         child: _buildBody(),
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: child,
-        ),
+        transitionBuilder: (child, animation) =>
+            FadeTransition(opacity: animation, child: child),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book_rounded),
             label: 'Roleplay',
           ),
           NavigationDestination(
-            icon: Icon(Icons.mic_none_rounded),
-            selectedIcon: Icon(Icons.mic_rounded),
+            icon: const _BuddyNavIcon(selected: false),
+            selectedIcon: const _BuddyNavIcon(selected: true),
             label: 'Buddy',
           ),
-          NavigationDestination(
+          const NavigationDestination(
+            icon: Icon(Icons.record_voice_over_outlined),
+            selectedIcon: Icon(Icons.record_voice_over_rounded),
+            label: 'Pronounce',
+          ),
+          const NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
             selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',
@@ -108,20 +116,55 @@ class _HomeContent extends StatelessWidget {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children:  [
+        children: [
           SizedBox(height: 12),
           RoleplaySection(),
           SizedBox(height: 24),
-          Center(
-              child: HomeMicButton(
-            onTap: onMicTap,
-          )),
+          Center(child: HomeMicButton(onTap: onMicTap)),
           SizedBox(height: 24),
           PronunciationSection(),
           SizedBox(height: 24),
           ResourcesSection(),
           SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+}
+
+class _BuddyNavIcon extends StatelessWidget {
+  final bool selected;
+
+  const _BuddyNavIcon({required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    final shadowColor = selected
+        ? const Color(0x332563EB)
+        : const Color(0x222563EB);
+
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1D4ED8), Color(0xFF0EA5E9)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor,
+            blurRadius: selected ? 10 : 7,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Icon(
+        selected ? Icons.mic_rounded : Icons.mic_none_rounded,
+        size: 20,
+        color: Colors.white,
       ),
     );
   }
