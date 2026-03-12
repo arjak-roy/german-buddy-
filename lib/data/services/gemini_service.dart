@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../../core/constants/app_keys.dart';
 import '../models/pronunciation_analysis_report.dart';
 
 class TicTacToeTurnPlan {
@@ -40,8 +41,6 @@ class TicTacToeTurnPlan {
 }
 
 class GeminiService {
-  static const _apiKey =
-      'AIzaSyC3oONewy_6MuxJeyTs0JhyGdXXe416tfE'; // Use Flutter Dotenv for MVP speed
   static const _model =
       'gemini-3.1-flash-lite-preview'; // Note: check current available models
   static const _audioModel = 'gemini-3-flash-preview';
@@ -49,9 +48,10 @@ class GeminiService {
       'https://generativelanguage.googleapis.com/v1beta/models';
   static const _ticTacToeToolName = 'resolve_tic_tac_toe_turn';
 
-  String get _endpoint => '$_baseUrl/$_model:generateContent?key=$_apiKey';
+  String get _endpoint =>
+    '$_baseUrl/$_model:generateContent?key=${AppKeys.geminiApiKey}';
   String get _audioEndpoint =>
-      '$_baseUrl/$_audioModel:generateContent?key=$_apiKey';
+    '$_baseUrl/$_audioModel:generateContent?key=${AppKeys.geminiApiKey}';
 
   static const String _ticTacToeSystemPrompt =
       'You are Wunderbar TicTacToe, a bilingual (German/English) game host and opponent. '
