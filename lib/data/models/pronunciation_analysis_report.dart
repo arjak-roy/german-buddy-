@@ -1,60 +1,52 @@
 class PronunciationPhonemeFeedback {
   final String phoneme;
-  final int score;
-  final String lipShape;
+  final String status; // 'correct', 'incorrect', 'partial'
   final String observed;
-  final String issue;
-  final String suggestion;
+  final String lipShape;
+  final String tip;
 
   const PronunciationPhonemeFeedback({
     required this.phoneme,
-    required this.score,
-    required this.lipShape,
+    required this.status,
     required this.observed,
-    required this.issue,
-    required this.suggestion,
+    required this.lipShape,
+    required this.tip,
   });
 
   factory PronunciationPhonemeFeedback.fromMap(Map<String, dynamic> map) {
-    int parseScore(dynamic value) {
-      if (value is int) return value.clamp(0, 100);
-      if (value is num) return value.round().clamp(0, 100);
-      if (value is String) {
-        return (int.tryParse(value) ?? 0).clamp(0, 100);
+    String parseStatus(dynamic value) {
+      final status = (value ?? '').toString().trim().toLowerCase();
+      if (['correct', 'incorrect', 'partial'].contains(status)) {
+        return status;
       }
-      return 0;
+      return 'partial';
     }
 
     return PronunciationPhonemeFeedback(
       phoneme: (map['phoneme'] ?? '').toString().trim(),
-      score: parseScore(map['score']),
-      lipShape: (map['lipShape'] ?? '').toString().trim(),
+      status: parseStatus(map['status']),
       observed: (map['observed'] ?? '').toString().trim(),
-      issue: (map['issue'] ?? '').toString().trim(),
-      suggestion: (map['suggestion'] ?? '').toString().trim(),
+      lipShape: (map['lipShape'] ?? '').toString().trim(),
+      tip: (map['tip'] ?? '').toString().trim(),
     );
   }
 }
 
 class PronunciationAnalysisReport {
   final int overallScore;
-  final String summary;
   final String heardText;
-  final String mouthShapeGuide;
   final List<String> strengths;
   final List<String> priorities;
-  final String nextTry;
   final List<PronunciationPhonemeFeedback> phonemeBreakdown;
+  final String nextTryInstruction;
 
   const PronunciationAnalysisReport({
     required this.overallScore,
-    required this.summary,
     required this.heardText,
-    required this.mouthShapeGuide,
     required this.strengths,
     required this.priorities,
-    required this.nextTry,
     required this.phonemeBreakdown,
+    required this.nextTryInstruction,
   });
 
   factory PronunciationAnalysisReport.fromMap(Map<String, dynamic> map) {
@@ -88,13 +80,11 @@ class PronunciationAnalysisReport {
 
     return PronunciationAnalysisReport(
       overallScore: parseScore(map['overallScore']),
-      summary: (map['summary'] ?? '').toString().trim(),
       heardText: (map['heardText'] ?? '').toString().trim(),
-      mouthShapeGuide: (map['mouthShapeGuide'] ?? '').toString().trim(),
       strengths: parseStrings(map['strengths']),
       priorities: parseStrings(map['priorities']),
-      nextTry: (map['nextTry'] ?? '').toString().trim(),
       phonemeBreakdown: parseBreakdown(map['phonemeBreakdown']),
+      nextTryInstruction: (map['nextTryInstruction'] ?? '').toString().trim(),
     );
   }
 }

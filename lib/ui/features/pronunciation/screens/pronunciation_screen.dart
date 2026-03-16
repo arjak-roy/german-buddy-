@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import '../models/pronunciation_item.dart';
 import 'pronunciation_lesson_screen.dart';
+// import removed: '../../listening/screens/listening_catalogue_screen.dart';
 
 class PronunciationScreen extends StatelessWidget {
+  static const _panelTitle = Color(0xFF0F172A);
+  static const _panelBody = Color(0xFF334155);
+
   final bool embedded;
 
   const PronunciationScreen({super.key, this.embedded = false});
@@ -22,33 +26,42 @@ class PronunciationScreen extends StatelessWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFF8FAFC), Color(0xFFE0F2FE)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pronunciation Lab',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF8FAFC), Color(0xFFE0F2FE)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Choose one word and practice it step by step with native German playback, phonetic guidance, recording, and analysis.',
-                    style: TextStyle(height: 1.35, color: Color(0xFF334155)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Pronunciation Lab',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: _panelTitle,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Choose one word and practice it step by step with native German playback, phonetic guidance, recording, and analysis.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          height: 1.35,
+                          color: _panelBody,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                // ...existing code...
+              ],
             ),
           ),
         ),
@@ -86,6 +99,10 @@ class PronunciationScreen extends StatelessWidget {
 }
 
 class _PronunciationGridCard extends StatelessWidget {
+  static const _panelTitle = Color(0xFF0F172A);
+  static const _panelBody = Color(0xFF334155);
+  static const _panelMuted = Color(0xFF475569);
+
   final PronunciationItem item;
   final int index;
   final VoidCallback onTap;
@@ -160,7 +177,7 @@ class _PronunciationGridCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
+                    color: _panelTitle,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -168,10 +185,10 @@ class _PronunciationGridCard extends StatelessWidget {
                   item.phonetic,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.8,
-                    color: Color(0xFF334155),
+                    color: _panelBody,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -179,19 +196,28 @@ class _PronunciationGridCard extends StatelessWidget {
                   item.english,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF475569)),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _panelMuted,
+                  ),
                 ),
                 const SizedBox(height: 14),
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.play_circle_outline_rounded, size: 18),
-                    SizedBox(width: 6),
+                    const Icon(
+                      Icons.play_circle_outline_rounded,
+                      size: 18,
+                      color: _panelTitle,
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         'Open lesson',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _panelTitle,
+                        ),
                       ),
                     ),
                   ],

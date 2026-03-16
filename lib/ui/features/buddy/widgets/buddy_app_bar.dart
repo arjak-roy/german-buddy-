@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../providers/speech_provider.dart';
+import '../../../shared/widgets/theme_mode_button.dart';
 
 class BuddyAppBar extends StatelessWidget implements PreferredSizeWidget {
   const BuddyAppBar({super.key});
@@ -9,8 +10,10 @@ class BuddyAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final showDebug = context.watch<SpeechProvider>().showDebugPanel;
+    final scheme = Theme.of(context).colorScheme;
 
     return AppBar(
+      toolbarHeight: 72,
       backgroundColor: Theme.of(context).colorScheme.surface.withOpacity(0.9),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -20,14 +23,14 @@ class BuddyAppBar extends StatelessWidget implements PreferredSizeWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.greenAccent.withOpacity(0.16),
+              color: scheme.tertiary.withOpacity(0.16),
               borderRadius: BorderRadius.circular(999),
             ),
-            child: const Text(
+            child: Text(
               'LIVE',
               style: TextStyle(
                 fontSize: 10,
-                color: Colors.greenAccent,
+                color: scheme.tertiary,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.3,
               ),
@@ -37,6 +40,7 @@ class BuddyAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       centerTitle: true,
       actions: [
+        const ThemeModeButton(),
         IconButton(
           icon: Icon(showDebug ? Icons.bug_report : Icons.info_outline),
           tooltip: showDebug ? 'Hide STT debug panel' : 'Show STT debug panel',
@@ -47,5 +51,5 @@ class BuddyAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(72);
 }

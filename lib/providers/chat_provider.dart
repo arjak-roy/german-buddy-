@@ -13,6 +13,13 @@ class ChatProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  Uint8List? _latestAiAudioBytes;
+  String? _latestAiAudioMimeType;
+  int _latestAiAudioToken = 0;
+  Uint8List? get latestAiAudioBytes => _latestAiAudioBytes;
+  String? get latestAiAudioMimeType => _latestAiAudioMimeType;
+  int get latestAiAudioToken => _latestAiAudioToken;
+
   /// Add a raw entry and notify listeners.
   void addMessage(ChatEntry entry) {
     _messages.add(entry);
@@ -30,10 +37,27 @@ class ChatProvider extends ChangeNotifier {
 
   /// Split the raw model output into German text + English translation.
   ChatEntry _parseReply(String raw) {
+    final trimmed = raw.trim();
+
+    // Structured markdown format for list/table responses:
+    // [German]\n...markdown...\n[English]\n...markdown...
+    final structured = RegExp(
+      r'^\s*\[German\]\s*\n([\s\S]*?)\n\s*\[English\]\s*\n([\s\S]*?)\s*$',
+      multiLine: true,
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+
+    if (structured != null) {
+      final german = (structured.group(1) ?? '').trim();
+      final english = (structured.group(2) ?? '').trim();
+      return ChatEntry(text: german, translated: english, isUser: false);
+    }
+
     // The expected format is:
     // German sentence on first line
     // English translation on second line, optionally in parentheses.
-    final lines = raw.trim().split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    final lines =
+        trimmed.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     String german = '';
     String english = '';
     if (lines.isNotEmpty) {
@@ -64,8 +88,13 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final reply = await _service.ask(text);
-      addMessage(_parseReply(reply));
+      final reply = await _service.askBuddy(text);
+      addMessage(_parseReply(reply.text));
+      if (reply.audioBytes != null && reply.audioBytes!.isNotEmpty) {
+        _latestAiAudioBytes = reply.audioBytes;
+        _latestAiAudioMimeType = reply.audioMimeType;
+        _latestAiAudioToken += 1;
+      }
     } catch (e) {
       addMessage(ChatEntry(text: 'Fehler: $e', isUser: false));
     }

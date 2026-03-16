@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:wunderbarai/providers/chat_provider.dart';
+import 'package:wunderbarai/providers/voice_provider.dart';
+import 'dart:typed_data';
 
 import '../widgets/chat_bubble.dart';
 import '../widgets/buddy_app_bar.dart';
@@ -28,7 +31,9 @@ class BuddyScreen extends StatefulWidget {
 class _BuddyScreenState extends State<BuddyScreen> {
   late final ScrollController _scrollController;
   late final FlutterTts _tts;
+  late final AudioPlayer _nativeAudioPlayer;
   int _lastCount = -1;
+  int _lastPlayedAudioToken = 0;
   bool _didInitialBottomJump = false;
   String? _lastSpokenAiText;
 
@@ -40,7 +45,7 @@ class _BuddyScreenState extends State<BuddyScreen> {
       _scrollController.animateTo(
         target,
         duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+        curve: Curves.easeOutQuad,
       );
       return;
     }
@@ -51,35 +56,110 @@ class _BuddyScreenState extends State<BuddyScreen> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _nativeAudioPlayer = AudioPlayer();
     _tts = FlutterTts();
-    _tts.setLanguage('de-DE');
+    _tts.setLanguage('de-DE'); // fallback; overridden by _applyVoiceSettings
     _tts.setPitch(1.0);
     _tts.setSpeechRate(0.45);
     _tts.awaitSpeakCompletion(false);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyVoiceSettings());
+  }
+
+  Future<void> _applyVoiceSettings() async {
+    if (!mounted) return;
+    final vp = context.read<VoiceProvider>();
+    await vp.loadVoices();
+    if (!mounted) return;
+    await vp.applyTo(_tts);
   }
 
   @override
   void dispose() {
     _tts.stop();
+    _nativeAudioPlayer.stop();
+    _nativeAudioPlayer.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _speakLatestAiMessage(List entries) async {
+  Future<void> _playLatestAiMessage(List entries, ChatProvider chat) async {
     if (entries.isEmpty) return;
     final latest = entries.last;
     if (latest.isUser) return;
+
+    final audioToken = chat.latestAiAudioToken;
+    final audioBytes = chat.latestAiAudioBytes;
+    final audioMime = chat.latestAiAudioMimeType ?? '';
+    var playedNativeAudio = false;
+    if (audioToken > _lastPlayedAudioToken &&
+        audioBytes != null &&
+        audioBytes.isNotEmpty) {
+      _lastPlayedAudioToken = audioToken;
+      try {
+        await _tts.stop();
+        await _nativeAudioPlayer.stop();
+        final playable = audioMime.contains('audio/pcm')
+            ? _wrapPcm16LeToWav(audioBytes)
+            : audioBytes;
+        await _nativeAudioPlayer.play(BytesSource(playable));
+        playedNativeAudio = true;
+      } catch (_) {
+        // Fall back to TTS below when model audio playback fails.
+      }
+    }
 
     final text = (latest.text).trim();
     if (text.isEmpty || text == _lastSpokenAiText) return;
 
     _lastSpokenAiText = text;
-    try {
-      await _tts.stop();
-      await _tts.speak(text);
-    } catch (_) {
-      // Ignore TTS runtime errors so chat flow remains uninterrupted.
+
+    // Fallback speech path when no native model audio is available.
+    if (!playedNativeAudio) {
+      try {
+        await _tts.stop();
+        await _tts.speak(text);
+      } catch (_) {
+        // Ignore TTS runtime errors so chat flow remains uninterrupted.
+      }
     }
+  }
+
+  Uint8List _wrapPcm16LeToWav(Uint8List pcmData, {int sampleRate = 24000}) {
+    const channels = 1;
+    const bitsPerSample = 16;
+    final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
+    final blockAlign = channels * bitsPerSample ~/ 8;
+    final dataSize = pcmData.length;
+    final totalSize = 44 + dataSize;
+
+    final out = BytesBuilder(copy: false);
+    void wAscii(String s) => out.add(Uint8List.fromList(s.codeUnits));
+    void w16(int v) => out.add(Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF]));
+    void w32(int v) => out.add(
+          Uint8List.fromList([
+            v & 0xFF,
+            (v >> 8) & 0xFF,
+            (v >> 16) & 0xFF,
+            (v >> 24) & 0xFF,
+          ]),
+        );
+
+    wAscii('RIFF');
+    w32(totalSize - 8);
+    wAscii('WAVE');
+    wAscii('fmt ');
+    w32(16);
+    w16(1);
+    w16(channels);
+    w32(sampleRate);
+    w32(byteRate);
+    w16(blockAlign);
+    w16(bitsPerSample);
+    wAscii('data');
+    w32(dataSize);
+    out.add(pcmData);
+
+    return out.takeBytes();
   }
 
   Widget _buildContent() {
@@ -110,7 +190,10 @@ class _BuddyScreenState extends State<BuddyScreen> {
                   padding: const EdgeInsets.all(24.0),
                   child: Text(
                     'Try saying "Hello buddy" in German',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontSize: 16,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -128,7 +211,7 @@ class _BuddyScreenState extends State<BuddyScreen> {
         });
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _speakLatestAiMessage(entries);
+          _playLatestAiMessage(entries, chat);
         });
 
         _lastCount = entries.length;
@@ -204,11 +287,19 @@ class _BuddyScreenState extends State<BuddyScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: const BuddyAppBar(),
-      body: _buildContent(),
-      bottomNavigationBar: const BottomMic(),
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          _tts.stop();
+          _nativeAudioPlayer.stop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.grey.shade50,
+        appBar: const BuddyAppBar(),
+        body: _buildContent(),
+        bottomNavigationBar: const BottomMic(),
+      ),
     );
   }
 }

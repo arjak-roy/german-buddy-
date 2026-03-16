@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../agentic/screens/tic_tac_toe_screen.dart';
+import '../../agentic/screens/bread_shop_screen.dart';
 import 'roleplay_card.dart';
 
 class _ScenarioItem {
@@ -56,6 +57,12 @@ class _RoleplaySectionState extends State<RoleplaySection> {
 
   final List<_ScenarioItem> _agenticItems = const [
     _ScenarioItem(
+      title: 'Agentic AI Bakery',
+      subtitle: 'Negotiate bread prices',
+      image: 'https://source.unsplash.com/900x700/?bakery,bread,pastry',
+      pageBuilder: _buildBreadShopPage,
+    ),
+    _ScenarioItem(
       title: 'Escape the Room',
       subtitle: 'Solve puzzles as an agent',
       image: 'https://source.unsplash.com/900x700/?escape,room,puzzle',
@@ -72,6 +79,10 @@ class _RoleplaySectionState extends State<RoleplaySection> {
       pageBuilder: _buildTicTacToePage,
     ),
   ];
+
+  static Widget _buildBreadShopPage(BuildContext context) {
+    return const BreadShopScreen();
+  }
 
   static Widget _buildTicTacToePage(BuildContext context) {
     return const TicTacToeScreen();
@@ -97,7 +108,10 @@ class _RoleplaySectionState extends State<RoleplaySection> {
               else
                 const SizedBox.shrink(),
               if (widget.showHeader)
-                const Text('See all', style: TextStyle(color: Colors.blue))
+                Text(
+                  'See all',
+                  style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                )
               else
                 const SizedBox.shrink(),
             ],

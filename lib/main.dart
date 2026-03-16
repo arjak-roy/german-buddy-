@@ -10,6 +10,7 @@ import 'providers/ai_provider.dart';
 import 'providers/pronunciation_analysis_provider.dart';
 import 'providers/pronunciation_recording_provider.dart';
 import 'providers/speech_provider.dart';
+import 'providers/voice_provider.dart';
 import 'ui/features/auth/screens/login_screen.dart';
 import 'ui/features/home/screens/home_screen.dart';
 
@@ -40,6 +41,7 @@ class MainApp extends StatelessWidget {
           create: (_) => PronunciationRecordingProvider(),
         ),
         ChangeNotifierProvider<SpeechProvider>(create: (_) => SpeechProvider()),
+        ChangeNotifierProvider<VoiceProvider>(create: (_) => VoiceProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, __) {

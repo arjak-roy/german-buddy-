@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../../data/models/pronunciation_analysis_report.dart';
 import '../../../../providers/pronunciation_analysis_provider.dart';
 import '../../../../providers/pronunciation_recording_provider.dart';
+import '../../../../providers/voice_provider.dart';
 import '../../buddy/widgets/buddy_mic_button.dart';
 import '../models/pronunciation_item.dart';
 
@@ -21,6 +22,10 @@ class PronunciationLessonScreen extends StatefulWidget {
 }
 
 class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
+  static const _panelTitle = Color(0xFF0F172A);
+  static const _panelBody = Color(0xFF334155);
+  static const _panelMuted = Color(0xFF64748B);
+
   late final FlutterTts _tts;
   Timer? _segmentTimer;
   int _currentStep = 0;
@@ -36,10 +41,11 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   void initState() {
     super.initState();
     _tts = FlutterTts();
-    _tts.setLanguage('de-DE');
+    _tts.setLanguage('de-DE'); // fallback; overridden by _applyVoiceSettings
     _tts.setPitch(1.0);
     _tts.setSpeechRate(_speechRate);
     _tts.awaitSpeakCompletion(false);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyVoiceSettings());
 
     _tts.setStartHandler(() {
       if (!mounted) return;
@@ -59,6 +65,14 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
       recorder.initializePlayback();
       recorder.prepareForWord(widget.item.german);
     });
+  }
+
+  Future<void> _applyVoiceSettings() async {
+    if (!mounted) return;
+    final vp = context.read<VoiceProvider>();
+    await vp.loadVoices();
+    if (!mounted) return;
+    await vp.applyTo(_tts);
   }
 
   @override
@@ -313,7 +327,10 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
                         const SizedBox(height: 14),
                         Text(
                           'Speed: ${_speechRate.toStringAsFixed(2)}',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: _panelTitle,
+                          ),
                         ),
                         Slider(
                           value: _speechRate,
@@ -418,7 +435,9 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
                       children: [
                         Text(
                           'Press and hold to record your pronunciation. Recording stops automatically after 5 seconds.',
-                          style: theme.textTheme.bodyMedium,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: _panelBody,
+                          ),
                         ),
                         const SizedBox(height: 14),
                         Container(
@@ -490,7 +509,9 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
                                                 ? 'Recording saved and ready for analysis.'
                                                 : 'Hold the mic and pronounce ${widget.item.german}.')),
                                 textAlign: TextAlign.center,
-                                style: theme.textTheme.bodySmall,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: _panelMuted,
+                                ),
                               ),
                               if (recorder.hasRecording &&
                                   !recorder.isRecording) ...[
@@ -546,7 +567,7 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                    color: const Color(0xFF64748B),
+                                    color: _panelMuted,
                                   ),
                                 ),
                               ],
@@ -662,15 +683,15 @@ class _AnimatedLips extends StatelessWidget {
         : visemes[safeIndex];
 
     return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      tween: Tween<double>(begin: 1.0, end: isPlaying ? 1.03 : 1.0),
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutQuad,
+      tween: Tween<double>(begin: 1.0, end: isPlaying ? 1.04 : 1.0),
       builder: (context, scale, child) {
         return Transform.scale(scale: scale, child: child);
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutQuad,
         width: 176,
         height: 120,
         decoration: BoxDecoration(
@@ -1201,13 +1222,16 @@ class _AnalysisStepContent extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: const Color(0xFFCBD5E1)),
         ),
-        child: const Column(
+        child: Column(
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 12),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 12),
             Text(
               'Gemini is analyzing your pronunciation at phoneme level...',
               textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF334155),
+              ),
             ),
           ],
         ),
@@ -1269,10 +1293,17 @@ class _AnalysisStepContent extends StatelessWidget {
                           'Pronunciation Score',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
                           ),
                         ),
                         const SizedBox(height: 6),
-                        Text(report!.summary),
+                        Text(
+                          '${report!.overallScore}/100',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1282,24 +1313,9 @@ class _AnalysisStepContent extends StatelessWidget {
                 const SizedBox(height: 14),
                 Text(
                   'Gemini heard: ${report!.heardText}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ],
-              if (report!.mouthShapeGuide.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0F2FE),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Mouth shape guide: ${report!.mouthShapeGuide}',
-                    style: const TextStyle(
-                      color: Color(0xFF0C4A6E),
-                      fontWeight: FontWeight.w600,
-                    ),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F172A),
                   ),
                 ),
               ],
@@ -1307,22 +1323,24 @@ class _AnalysisStepContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        _AnalysisListCard(
-          title: 'Strengths',
-          icon: Icons.thumb_up_alt_outlined,
-          items: report!.strengths,
-          emptyText: 'No clear strengths identified yet.',
-          color: const Color(0xFF166534),
-        ),
-        const SizedBox(height: 12),
-        _AnalysisListCard(
-          title: 'Needs Work',
-          icon: Icons.track_changes_outlined,
-          items: report!.priorities,
-          emptyText: 'No major issues identified.',
-          color: const Color(0xFF9A3412),
-        ),
-        const SizedBox(height: 12),
+        if (report!.strengths.isNotEmpty)
+          _AnalysisListCard(
+            title: 'Strengths',
+            icon: Icons.thumb_up_alt_outlined,
+            items: report!.strengths,
+            emptyText: 'No clear strengths identified yet.',
+            color: const Color(0xFF166534),
+          ),
+        if (report!.strengths.isNotEmpty) const SizedBox(height: 12),
+        if (report!.priorities.isNotEmpty)
+          _AnalysisListCard(
+            title: 'Needs Work',
+            icon: Icons.track_changes_outlined,
+            items: report!.priorities,
+            emptyText: 'No major issues identified.',
+            color: const Color(0xFF9A3412),
+          ),
+        if (report!.priorities.isNotEmpty) const SizedBox(height: 12),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
@@ -1338,6 +1356,7 @@ class _AnalysisStepContent extends StatelessWidget {
                 'Phoneme Breakdown',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1362,10 +1381,16 @@ class _AnalysisStepContent extends StatelessWidget {
                 'Next Try',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
                 ),
               ),
               const SizedBox(height: 8),
-              Text(report!.nextTry),
+              Text(
+                report!.nextTryInstruction,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF334155),
+                ),
+              ),
             ],
           ),
         ),
@@ -1390,7 +1415,7 @@ class _RetryHintCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final priorities = report.priorities.take(2).toList(growable: false);
+    final topPriorities = report.priorities.take(2).toList(growable: false);
 
     return Container(
       width: double.infinity,
@@ -1404,24 +1429,15 @@ class _RetryHintCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Retry Hints',
+            'Quick Tips',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w800,
               color: const Color(0xFF92400E),
             ),
           ),
           const SizedBox(height: 8),
-          if (report.mouthShapeGuide.isNotEmpty)
-            Text(
-              'Mouth shape: ${report.mouthShapeGuide}',
-              style: const TextStyle(
-                color: Color(0xFF78350F),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          if (priorities.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...priorities.map(
+          if (topPriorities.isNotEmpty) ...[
+            ...topPriorities.map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
@@ -1439,24 +1455,25 @@ class _RetryHintCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         item,
-                        style: const TextStyle(color: Color(0xFF78350F)),
+                        style: TextStyle(
+                          color: const Color(0xFF78350F),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+            const SizedBox(height: 8),
           ],
-          if (report.nextTry.isNotEmpty) ...[
-            const SizedBox(height: 4),
+          if (report.nextTryInstruction.isNotEmpty)
             Text(
-              'Next try: ${report.nextTry}',
+              report.nextTryInstruction,
               style: const TextStyle(
                 color: Color(0xFF92400E),
                 fontWeight: FontWeight.w700,
               ),
             ),
-          ],
         ],
       ),
     );
@@ -1529,6 +1546,42 @@ class _AnalysisListCard extends StatelessWidget {
   }
 }
 
+class _StatusBadge extends StatelessWidget {
+  final String status;
+
+  const _StatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, label) = switch (status.toLowerCase()) {
+      'correct' => (const Color(0xFF16A34A), '✓'),
+      'incorrect' => (const Color(0xFFDC2626), '✗'),
+      'partial' => (const Color(0xFF0284C7), '◐'),
+      _ => (const Color(0xFF64748B), '?'),
+    };
+
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        border: Border.all(color: color),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PhonemeFeedbackCard extends StatelessWidget {
   final PronunciationPhonemeFeedback entry;
 
@@ -1559,25 +1612,8 @@ class _PhonemeFeedbackCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text(
-                '${entry.score}/100',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
+              _StatusBadge(status: entry.status),
             ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: (entry.score / 100).clamp(0.0, 1.0),
-              minHeight: 10,
-              backgroundColor: const Color(0xFFE2E8F0),
-              color: entry.score >= 80
-                  ? const Color(0xFF16A34A)
-                  : (entry.score >= 60
-                        ? const Color(0xFF0284C7)
-                        : const Color(0xFFDC2626)),
-            ),
           ),
           const SizedBox(height: 8),
           if (entry.lipShape.isNotEmpty) ...[
@@ -1590,11 +1626,9 @@ class _PhonemeFeedbackCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
           ],
-          Text('Observed: ${entry.observed}'),
+          Text('Heard: ${entry.observed}'),
           const SizedBox(height: 4),
-          Text('Issue: ${entry.issue}'),
-          const SizedBox(height: 4),
-          Text('Suggestion: ${entry.suggestion}'),
+          Text('Tip: ${entry.tip}'),
         ],
       ),
     );

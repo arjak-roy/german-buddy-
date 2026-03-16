@@ -5,11 +5,13 @@ import '../widgets/roleplay_section.dart';
 import '../widgets/home_mic_button.dart';
 import '../widgets/pronunciation_section.dart';
 import '../widgets/resources_section.dart';
+import '../widgets/exercises_section.dart';
 import '../../buddy/screens/buddy_screen.dart';
 import '../../buddy/widgets/buddy_app_bar.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../pronunciation/screens/pronunciation_screen.dart';
 import '../../roleplay/screens/roleplay_screen.dart';
+import '../../../shared/widgets/theme_mode_button.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,9 +31,15 @@ class _HomeScreenState extends State<HomeScreen> {
       case 2:
         return const BuddyAppBar();
       case 3:
-        return AppBar(title: const Text('Pronunciation Lab'));
+        return AppBar(
+          title: const Text('Pronunciation Lab'),
+          actions: const [ThemeModeButton()],
+        );
       case 4:
-        return AppBar(title: const Text('Profile'));
+        return AppBar(
+          title: const Text('Profile'),
+          actions: const [ThemeModeButton()],
+        );
       default:
         return const HomeAppBar();
     }
@@ -68,7 +76,17 @@ class _HomeScreenState extends State<HomeScreen> {
         duration: const Duration(milliseconds: 300),
         child: _buildBody(),
         transitionBuilder: (child, animation) =>
-            FadeTransition(opacity: animation, child: child),
+            FadeTransition(
+              opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic),
+              ),
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0.0, 0.08), end: Offset.zero).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                ),
+                child: child,
+              ),
+            ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
@@ -123,6 +141,8 @@ class _HomeContent extends StatelessWidget {
           Center(child: HomeMicButton(onTap: onMicTap)),
           SizedBox(height: 24),
           PronunciationSection(),
+          SizedBox(height: 24),
+          ExercisesSection(),
           SizedBox(height: 24),
           ResourcesSection(),
           SizedBox(height: 24),

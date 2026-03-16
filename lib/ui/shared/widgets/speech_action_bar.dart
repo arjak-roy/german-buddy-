@@ -8,10 +8,20 @@ import '../../features/buddy/widgets/buddy_mic_button.dart';
 class SpeechActionBar extends StatefulWidget {
   final Future<void> Function(String text) onSubmitted;
   final String keyboardLabel;
+  final Future<void> Function()? onCustomVoiceStart;
+  final Future<void> Function()? onCustomVoiceStop;
+  final bool? isCustomVoiceActive;
+  final double? customVoiceLevel;
+  final String? customTranscript;
 
   const SpeechActionBar({
     required this.onSubmitted,
     this.keyboardLabel = 'Type your message',
+    this.onCustomVoiceStart,
+    this.onCustomVoiceStop,
+    this.isCustomVoiceActive,
+    this.customVoiceLevel,
+    this.customTranscript,
     super.key,
   });
 
@@ -33,6 +43,13 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
   Widget build(BuildContext context) {
     return Consumer<SpeechProvider>(
       builder: (context, speech, _) {
+        final usesCustomVoice =
+            widget.onCustomVoiceStart != null && widget.onCustomVoiceStop != null;
+        final isVoiceActive =
+            widget.isCustomVoiceActive ?? (usesCustomVoice ? false : speech.isListening);
+        final voiceLevel = widget.customVoiceLevel ?? speech.voiceLevel;
+        final transcript = (widget.customTranscript ?? speech.currentTranscript).trim();
+
         final isGerman = speech.isGerman;
         final shadowA = isGerman
             ? const Color(0xFF000000)
@@ -100,12 +117,18 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
                 children: [
                   const SizedBox(width: 44),
                   BuddyMicButton(
-                    isRecording: speech.isListening,
-                    voiceLevel: speech.voiceLevel,
-                    onTap: () => _toggleListening(context),
-                    onLongPressStart: () => _startListening(context),
-                    onLongPressEnd: () => _stopListeningAndSubmit(context),
-                    onLongPressCancel: () => _stopListeningAndSubmit(context),
+                    isRecording: isVoiceActive,
+                    voiceLevel: voiceLevel,
+                    onTap: () =>
+                      usesCustomVoice ? _toggleCustomVoice() : _toggleListening(context),
+                    onLongPressStart: () =>
+                      usesCustomVoice ? _startCustomVoice() : _startListening(context),
+                    onLongPressEnd: () => usesCustomVoice
+                      ? _stopCustomVoice()
+                      : _stopListeningAndSubmit(context),
+                    onLongPressCancel: () => usesCustomVoice
+                      ? _stopCustomVoice()
+                      : _stopListeningAndSubmit(context),
                   ),
                   Column(
                     mainAxisSize: MainAxisSize.min,
@@ -114,7 +137,7 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
                         onTap: speech.toggleLanguage,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOut,
+                          curve: Curves.easeOutQuad,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
                             vertical: 8,
@@ -175,8 +198,7 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
                   ),
                 ],
               ),
-              if (speech.isListening &&
-                  speech.currentTranscript.isNotEmpty) ...[
+              if (isVoiceActive && transcript.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Container(
                   width: double.infinity,
@@ -208,7 +230,7 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          speech.currentTranscript,
+                          transcript,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -227,6 +249,27 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
         );
       },
     );
+  }
+
+  Future<void> _startCustomVoice() async {
+    final start = widget.onCustomVoiceStart;
+    if (start == null) return;
+    await start();
+  }
+
+  Future<void> _stopCustomVoice() async {
+    final stop = widget.onCustomVoiceStop;
+    if (stop == null) return;
+    await stop();
+  }
+
+  Future<void> _toggleCustomVoice() async {
+    final active = widget.isCustomVoiceActive ?? false;
+    if (active) {
+      await _stopCustomVoice();
+      return;
+    }
+    await _startCustomVoice();
   }
 
   Future<void> _startListening(BuildContext context) async {
