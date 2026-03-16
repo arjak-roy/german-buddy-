@@ -25,7 +25,7 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'WunderbarAI',
+                  'Kumpel AI',
                   style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.2),
                 ),
                 const SizedBox(width: 8),

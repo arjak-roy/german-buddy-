@@ -80,7 +80,7 @@ class PronunciationScreen extends StatelessWidget {
               maxCrossAxisExtent: 260,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              mainAxisExtent: 220,
+              mainAxisExtent: 250,
             ),
           ),
         ),
@@ -171,13 +171,16 @@ class _PronunciationGridCard extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                Text(
-                  item.german,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: _panelTitle,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    item.german,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: _panelTitle,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -192,13 +195,22 @@ class _PronunciationGridCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  item.english,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: _panelMuted,
-                  ),
+                Row(
+                  children: [
+                    const Text('🇬🇧', style: TextStyle(fontSize: 11)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        item.english,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _panelMuted,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 14),
                 Row(

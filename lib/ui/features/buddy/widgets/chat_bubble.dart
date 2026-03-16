@@ -15,12 +15,21 @@ class ChatMessage extends StatelessWidget {
   });
 
   bool _containsMarkdownTable(String value) {
-    final hasPipeRow = RegExp(r'^\s*\|.*\|\s*$', multiLine: true).hasMatch(value);
-    final hasSeparator = RegExp(
-      r'^\s*\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$',
-      multiLine: true,
-    ).hasMatch(value);
-    return hasPipeRow && hasSeparator;
+    final lines = value.split('\n');
+    final tableSeparator = RegExp(
+      r'^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$',
+      multiLine: false,
+    );
+
+    for (var i = 0; i < lines.length - 1; i++) {
+      final header = lines[i].trim();
+      final separator = lines[i + 1].trim();
+      if (header.contains('|') && tableSeparator.hasMatch(separator)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   @override

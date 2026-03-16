@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'dart:convert';
 
 import '../data/models/chat_entry.dart';
 import '../data/services/gemini_service.dart';
@@ -20,6 +22,17 @@ class ChatProvider extends ChangeNotifier {
   String? get latestAiAudioMimeType => _latestAiAudioMimeType;
   int get latestAiAudioToken => _latestAiAudioToken;
 
+  bool _isBuddyPreparing = false;
+  bool _isBuddyLiveReady = false;
+  int _buddyInterruptToken = 0;
+  Future<void>? _buddyPrepareFuture;
+  String? _buddyLiveError;
+
+  bool get isBuddyPreparing => _isBuddyPreparing;
+  bool get isBuddyLiveReady => _isBuddyLiveReady;
+  int get buddyInterruptToken => _buddyInterruptToken;
+  String? get buddyLiveError => _buddyLiveError;
+
   /// Add a raw entry and notify listeners.
   void addMessage(ChatEntry entry) {
     _messages.add(entry);
@@ -34,10 +47,23 @@ class ChatProvider extends ChangeNotifier {
 
   // service used to query the language model
   final GeminiService _service = GeminiService();
+  StreamSubscription<void>? _buddyInterruptSub;
+
+  ChatProvider() {
+    _buddyInterruptSub = _service.buddyLiveInterruptedStream.listen((_) {
+      _buddyInterruptToken += 1;
+      notifyListeners();
+    });
+  }
 
   /// Split the raw model output into German text + English translation.
   ChatEntry _parseReply(String raw) {
     final trimmed = raw.trim();
+
+    final jsonReply = _parseReplyFromJson(trimmed);
+    if (jsonReply != null) {
+      return jsonReply;
+    }
 
     // Structured markdown format for list/table responses:
     // [German]\n...markdown...\n[English]\n...markdown...
@@ -51,6 +77,12 @@ class ChatProvider extends ChangeNotifier {
       final german = (structured.group(1) ?? '').trim();
       final english = (structured.group(2) ?? '').trim();
       return ChatEntry(text: german, translated: english, isUser: false);
+    }
+
+    // Keep markdown-rich replies intact (lists/tables/steps) instead of
+    // forcing a line-based German/English split.
+    if (_looksStructured(trimmed)) {
+      return ChatEntry(text: trimmed, translated: null, isUser: false);
     }
 
     // The expected format is:
@@ -76,10 +108,123 @@ class ChatProvider extends ChangeNotifier {
     return ChatEntry(text: german, translated: english, isUser: false);
   }
 
+  ChatEntry? _parseReplyFromJson(String raw) {
+    if (raw.isEmpty) return null;
+
+    Map<String, dynamic>? asMap;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        asMap = decoded;
+      }
+    } catch (_) {
+      // Try extracting a JSON object from markdown-wrapped/mixed responses.
+      final match = RegExp(r'\{[\s\S]*\}').firstMatch(raw);
+      if (match == null) return null;
+      final candidate = match.group(0);
+      if (candidate == null) return null;
+      try {
+        final decoded = jsonDecode(candidate);
+        if (decoded is Map<String, dynamic>) {
+          asMap = decoded;
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+
+    if (asMap == null) return null;
+
+    String pickFirstNonEmpty(List<String> keys) {
+      for (final key in keys) {
+        final value = asMap![key];
+        if (value is String && value.trim().isNotEmpty) {
+          return value.trim();
+        }
+      }
+      return '';
+    }
+
+    final german = pickFirstNonEmpty([
+      'german',
+      'germanText',
+      'response',
+      'reply',
+      'text',
+      'message',
+      'shopkeeperResponse',
+      'spokenResponse',
+    ]);
+
+    final english = pickFirstNonEmpty([
+      'english',
+      'englishText',
+      'translation',
+      'translated',
+      'englishTranslation',
+    ]);
+
+    if (german.isEmpty && english.isEmpty) return null;
+
+    return ChatEntry(text: german.isEmpty ? english : german, translated: english, isUser: false);
+  }
+
+  bool _wantsStructuredOutput(String userText) {
+    final lower = userText.toLowerCase();
+    const triggers = [
+      'table',
+      'tables',
+      'list',
+      'lists',
+      'comparison',
+      'compare',
+      'steps',
+      'vocabulary',
+      'chart',
+      'tabelle',
+      'tabellen',
+      'liste',
+      'listen',
+      'vergleich',
+      'schritte',
+      'wortschatz',
+    ];
+    return triggers.any(lower.contains);
+  }
+
+  bool _looksStructured(String aiText) {
+    final text = aiText.trim();
+    if (text.isEmpty) return false;
+
+    if (RegExp(r'^\s*\[German\]', caseSensitive: false).hasMatch(text)) {
+      return true;
+    }
+
+    final tableSeparator = RegExp(
+      r'^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$',
+      multiLine: false,
+    );
+    final lines = text.split('\n');
+    for (var i = 0; i < lines.length - 1; i++) {
+      final header = lines[i].trim();
+      final separator = lines[i + 1].trim();
+      if (header.contains('|') && tableSeparator.hasMatch(separator)) {
+        return true;
+      }
+    }
+
+    final hasUnorderedList = RegExp(r'^\s*[-*+]\s+.+$', multiLine: true).hasMatch(text);
+    final hasOrderedList = RegExp(r'^\s*\d+[.)]\s+.+$', multiLine: true).hasMatch(text);
+
+    return hasUnorderedList || hasOrderedList;
+  }
+
   /// Sends [text] as a user message, then awaits a reply from Gemini and
   /// appends it. Any errors are also added as bot messages.
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty) return;
+
+    await prepareBuddyLiveSession();
 
     // add user message immediately
     addMessage(ChatEntry(text: text, isUser: true));
@@ -88,7 +233,20 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final reply = await _service.askBuddy(text);
+      final wantsStructured = _wantsStructuredOutput(text);
+      var reply = await _service.askBuddyLive(text);
+
+      if (wantsStructured && !_looksStructured(reply.text)) {
+        final fallbackText = await _service.ask(text);
+        if (fallbackText.trim().isNotEmpty) {
+          reply = BuddyDialogResponse(
+            text: fallbackText,
+            audioBytes: reply.audioBytes,
+            audioMimeType: reply.audioMimeType,
+          );
+        }
+      }
+
       addMessage(_parseReply(reply.text));
       if (reply.audioBytes != null && reply.audioBytes!.isNotEmpty) {
         _latestAiAudioBytes = reply.audioBytes;
@@ -101,5 +259,41 @@ class ChatProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> prepareBuddyLiveSession() async {
+    if (_isBuddyLiveReady) return;
+    if (_buddyPrepareFuture != null) {
+      await _buddyPrepareFuture;
+      return;
+    }
+
+    _isBuddyPreparing = true;
+    notifyListeners();
+
+    _buddyPrepareFuture = () async {
+      try {
+        await _service.startBuddyLiveSession();
+        _isBuddyLiveReady = _service.isBuddyLiveConnected;
+        _buddyLiveError = null;
+      } catch (e) {
+        _isBuddyLiveReady = false;
+        _buddyLiveError = _service.buddyLiveLastError ?? e.toString();
+      }
+    }();
+
+    await _buddyPrepareFuture;
+
+    _buddyPrepareFuture = null;
+
+    _isBuddyPreparing = false;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _buddyInterruptSub?.cancel();
+    _service.disposeBuddyLive();
+    super.dispose();
   }
 }

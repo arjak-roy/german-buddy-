@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../listening/screens/listening_catalogue_screen.dart';
+import '../../speaking/screens/speaking_catalogue_screen.dart';
 
 class ExercisesSection extends StatelessWidget {
   const ExercisesSection({super.key});
@@ -72,6 +73,12 @@ class _ExerciseCard extends StatelessWidget {
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => ListeningCatalogueScreen(),
+              ),
+            );
+          } else if (title == 'Speaking Exercises') {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const SpeakingCatalogueScreen(),
               ),
             );
           }

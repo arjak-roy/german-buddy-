@@ -41,10 +41,15 @@ class SpeechProvider extends ChangeNotifier {
   bool _showDebugPanel = false;
   String _lastStatus = 'idle';
   String? _lastError;
+  int _sessionGen = 0;
 
   String _recognized = '';
   String _finalRecognized = '';
   double? _lastConfidence;
+  final Map<String, double> _liveWordConfidence = {};
+  final Map<String, double> _wordStability = {};
+  final Map<String, int> _wordLastSeenTick = {};
+  int _resultTick = 0;
   DateTime _lastResultAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   double _voiceLevel = 0.0;
@@ -72,6 +77,13 @@ class SpeechProvider extends ChangeNotifier {
   String get activeLocaleId => isGerman ? _germanLocaleId : _englishLocaleId;
   String get lastStatus => _lastStatus;
   String? get lastError => _lastError;
+  Map<String, double> get liveWordConfidence => Map.unmodifiable(_liveWordConfidence);
+
+  double? confidenceForWord(String word) {
+    final normalized = _normalizeConfidenceToken(word);
+    if (normalized.isEmpty) return null;
+    return _liveWordConfidence[normalized];
+  }
 
   Future<void> ensureInitialized() async {
     if (_initialized) return;
@@ -128,6 +140,12 @@ class SpeechProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setLanguage(SpeechLanguage language) {
+    if (_language == language) return;
+    _language = language;
+    notifyListeners();
+  }
+
   void toggleDebugPanel() {
     _showDebugPanel = !_showDebugPanel;
     notifyListeners();
@@ -172,11 +190,17 @@ class SpeechProvider extends ChangeNotifier {
     _recognized = '';
     _finalRecognized = '';
     _lastConfidence = null;
+    _liveWordConfidence.clear();
+    _wordStability.clear();
+    _wordLastSeenTick.clear();
+    _resultTick = 0;
     _isListening = true;
     _voiceLevel = 0.0;
     _minSoundLevel = 50000;
     _maxSoundLevel = -50000;
     _lastResultAt = DateTime.now();
+    _sessionGen++;
+    final gen = _sessionGen;
     notifyListeners();
 
     final started = await _speech.listen(
@@ -187,17 +211,22 @@ class SpeechProvider extends ChangeNotifier {
       cancelOnError: false,
       listenMode: ListenMode.dictation,
       onResult: (result) {
+        // Discard results from a previous session that arrived late.
+        if (_sessionGen != gen) return;
         final words = result.recognizedWords.trim();
         if (words.isNotEmpty) {
-          _recognized = _postProcessTranscript(words);
+          final transcript = _postProcessTranscript(words);
+          _recognized = transcript;
+          _resultTick += 1;
           _lastResultAt = DateTime.now();
           if (result.hasConfidenceRating) {
             final c = result.confidence;
             // Some engines emit 0.0 as a placeholder confidence.
             _lastConfidence = (c > 0.0 && c <= 1.0) ? c : null;
           }
+          _updateRealtimeWordConfidence(transcript, _lastConfidence);
           if (result.finalResult) {
-            _finalRecognized = _postProcessTranscript(words);
+            _finalRecognized = transcript;
           }
           notifyListeners();
         }
@@ -254,10 +283,60 @@ class SpeechProvider extends ChangeNotifier {
   }
 
   void clearTranscript() {
+    _sessionGen++;
     _recognized = '';
     _finalRecognized = '';
     _lastConfidence = null;
+    _liveWordConfidence.clear();
+    _wordStability.clear();
+    _wordLastSeenTick.clear();
+    _resultTick = 0;
     notifyListeners();
+  }
+
+  void _updateRealtimeWordConfidence(String transcript, double? confidence) {
+    final tokens = transcript
+        .split(RegExp(r'\s+'))
+        .map(_normalizeConfidenceToken)
+        .where((token) => token.isNotEmpty)
+        .toSet();
+
+    if (tokens.isEmpty) return;
+
+    for (final token in tokens) {
+      final previousStability = _wordStability[token] ?? 0.0;
+      final seenBefore = _wordLastSeenTick.containsKey(token);
+      final stabilityBoost = seenBefore ? 0.09 : 0.18;
+      final stability = (previousStability + stabilityBoost).clamp(0.0, 1.0);
+      _wordStability[token] = stability;
+      _wordLastSeenTick[token] = _resultTick;
+
+      // If engine has only utterance-level confidence, estimate per-word
+      // confidence using token stability across realtime partial results.
+      final inferredWordConfidence = (0.25 + (stability * 0.65)).clamp(0.0, 1.0);
+      final nextConfidence = (confidence != null && confidence > 0.0)
+          ? ((confidence * 0.7) + (inferredWordConfidence * 0.3)).clamp(0.0, 1.0)
+          : inferredWordConfidence;
+
+      final previous = _liveWordConfidence[token];
+      _liveWordConfidence[token] = previous == null
+          ? nextConfidence
+          : ((previous * 0.55) + (nextConfidence * 0.45)).clamp(0.0, 1.0);
+    }
+
+    // Light decay for tokens not present in the latest partial result.
+    for (final token in _wordStability.keys.toList()) {
+      if (!tokens.contains(token)) {
+        _wordStability[token] = (_wordStability[token]! - 0.03).clamp(0.0, 1.0);
+      }
+    }
+  }
+
+  String _normalizeConfidenceToken(String token) {
+    return token
+        .toLowerCase()
+        .replaceAll(RegExp(r"[^a-z0-9äöüß]"), '')
+        .trim();
   }
 
   String _postProcessTranscript(String text) {

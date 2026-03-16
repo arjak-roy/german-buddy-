@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -58,9 +59,12 @@ class GeminiService {
   static const _model =
       'gemini-3.1-flash-lite-preview'; // Note: check current available models
   static const _buddyModel = 'gemini-2.5-flash-preview-native-audio-dialog';
+  static const _buddyLiveModel = 'gemini-2.5-flash-native-audio-preview-12-2025';
   static const _audioModel = 'gemini-3-flash-preview';
   static const _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models';
+  static const _baseLiveWsUrl =
+    'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
   static const _ticTacToeToolName = 'resolve_tic_tac_toe_turn';
 
   String get _endpoint =>
@@ -69,6 +73,78 @@ class GeminiService {
     '$_baseUrl/$_buddyModel:generateContent?key=${AppKeys.geminiApiKey}';
   String get _audioEndpoint =>
     '$_baseUrl/$_audioModel:generateContent?key=${AppKeys.geminiApiKey}';
+  String get _buddyLiveEndpoint =>
+      '$_baseLiveWsUrl?key=${AppKeys.geminiApiKey}';
+
+  WebSocket? _buddyLiveSocket;
+  StreamSubscription<dynamic>? _buddyLiveSocketSub;
+  Completer<void>? _buddyLiveSetupCompleter;
+  Completer<BuddyDialogResponse>? _buddyLivePending;
+  bool _buddyLiveReady = false;
+  String? _buddyLiveLastError;
+  BytesBuilder? _buddyLiveAudioBuilder;
+  StringBuffer? _buddyLiveTextBuffer;
+  final StreamController<void> _buddyLiveInterruptedController =
+      StreamController<void>.broadcast();
+
+  Stream<void> get buddyLiveInterruptedStream =>
+      _buddyLiveInterruptedController.stream;
+  bool get isBuddyLiveConnected => _buddyLiveSocket != null && _buddyLiveReady;
+  String? get buddyLiveLastError => _buddyLiveLastError;
+
+  static const List<Map<String, dynamic>> _buddyLiveToolDeclarations = [
+    {
+      'name': 'manage_todo_list',
+      'description':
+          'Create, update, complete, and reprioritize to-do items for the learner.',
+      'parameters': {
+        'type': 'OBJECT',
+        'properties': {
+          'action': {
+            'type': 'STRING',
+            'enum': ['create', 'update', 'complete', 'delete', 'list'],
+          },
+          'title': {'type': 'STRING'},
+          'itemId': {'type': 'STRING'},
+          'priority': {
+            'type': 'STRING',
+            'enum': ['low', 'medium', 'high'],
+          },
+          'notes': {'type': 'STRING'},
+        },
+        'required': ['action'],
+      },
+    },
+    {
+      'name': 'manage_recruitment_pipeline',
+      'description':
+          'Track candidates, interview status, feedback, and hiring decisions.',
+      'parameters': {
+        'type': 'OBJECT',
+        'properties': {
+          'action': {
+            'type': 'STRING',
+            'enum': [
+              'add_candidate',
+              'update_stage',
+              'add_feedback',
+              'schedule_interview',
+              'make_decision'
+            ],
+          },
+          'candidateName': {'type': 'STRING'},
+          'role': {'type': 'STRING'},
+          'stage': {'type': 'STRING'},
+          'feedback': {'type': 'STRING'},
+          'decision': {
+            'type': 'STRING',
+            'enum': ['hire', 'hold', 'reject'],
+          },
+        },
+        'required': ['action'],
+      },
+    },
+  ];
 
   static const String _ticTacToeSystemPrompt =
       'You are Wunderbar TicTacToe, a bilingual (German/English) game host and opponent. '
@@ -219,7 +295,11 @@ class GeminiService {
       '  • No greetings preamble, no meta-commentary, no "Here is your table:" labels.\n'
       '  • Stay warm, encouraging, and concise.';
 
-  Future<String> ask(String userMessage, [String? systemPrompt]) async {
+  Future<String> ask(
+    String userMessage, [
+    String? systemPrompt,
+    bool forceJsonResponse = false,
+  ]) async {
     final prompt = (systemPrompt != null && systemPrompt.isNotEmpty)
         ? systemPrompt
         : _buddySystemPrompt;
@@ -240,7 +320,11 @@ class GeminiService {
           {'text': prompt},
         ],
       },
-      'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 400},
+      'generationConfig': {
+        'temperature': 0.1,
+        'maxOutputTokens': 2048,
+        if (forceJsonResponse) 'responseMimeType': 'application/json',
+      },
     };
 
     try {
@@ -307,6 +391,157 @@ class GeminiService {
       // If the native-audio-dialog model/region is unavailable, fall back to the
       // existing text model so Buddy remains usable.
       return BuddyDialogResponse(text: await ask(userMessage, prompt));
+    }
+  }
+
+  Future<void> startBuddyLiveSession([String? systemPrompt]) async {
+    if (isBuddyLiveConnected) return;
+
+    await closeBuddyLiveSession();
+
+    final prompt = (systemPrompt != null && systemPrompt.isNotEmpty)
+        ? systemPrompt
+        : _buddySystemPrompt;
+
+    late final WebSocket socket;
+    try {
+      socket = await WebSocket.connect(
+        _buddyLiveEndpoint,
+        compression: CompressionOptions.compressionOff,
+      );
+    } catch (e) {
+      _buddyLiveLastError = 'Buddy live websocket connect failed: $e';
+      rethrow;
+    }
+
+    _buddyLiveSocket = socket;
+    _buddyLiveReady = false;
+    _buddyLiveLastError = null;
+    _buddyLiveSetupCompleter = Completer<void>();
+
+    _buddyLiveSocketSub = socket.listen(
+      _handleBuddyLiveMessage,
+      onError: (_) {
+        _buddyLiveLastError = 'Buddy live socket error';
+        if (_buddyLiveSetupCompleter != null &&
+            !_buddyLiveSetupCompleter!.isCompleted) {
+          _buddyLiveSetupCompleter!
+              .completeError(StateError(_buddyLiveLastError!));
+        }
+        _completeBuddyLivePendingWithFallback();
+      },
+      onDone: () {
+        final code = socket.closeCode;
+        final reason = socket.closeReason;
+        _buddyLiveLastError =
+            'Buddy live socket closed (code: ${code ?? 'n/a'}, reason: ${reason ?? 'n/a'})';
+        if (_buddyLiveSetupCompleter != null &&
+            !_buddyLiveSetupCompleter!.isCompleted) {
+          _buddyLiveSetupCompleter!
+              .completeError(StateError(_buddyLiveLastError!));
+        }
+        _buddyLiveReady = false;
+        _completeBuddyLivePendingWithFallback();
+      },
+      cancelOnError: false,
+    );
+
+    final setup = {
+      'config': {
+        'model': 'models/$_buddyLiveModel',
+        'responseModalities': ['TEXT', 'AUDIO'],
+        'speechConfig': {
+          'voiceConfig': {
+            'prebuiltVoiceConfig': {'voiceName': 'Aoede'},
+          },
+        },
+        'systemInstruction': {
+          'parts': [
+            {'text': prompt},
+          ],
+        },
+        'outputAudioTranscription': {},
+        'tools': [
+          {
+            'functionDeclarations': _buddyLiveToolDeclarations,
+          },
+        ],
+      },
+    };
+
+    socket.add(jsonEncode(setup));
+
+    await _buddyLiveSetupCompleter!.future.timeout(
+      const Duration(seconds: 12),
+      onTimeout: () {
+        _buddyLiveLastError = 'Buddy live setup timeout';
+        throw StateError(_buddyLiveLastError!);
+      },
+    );
+
+    _buddyLiveReady = true;
+  }
+
+  Future<void> closeBuddyLiveSession() async {
+    _buddyLiveReady = false;
+    _buddyLiveSetupCompleter = null;
+    _buddyLivePending = null;
+    _buddyLiveAudioBuilder = null;
+    _buddyLiveTextBuffer = null;
+
+    await _buddyLiveSocketSub?.cancel();
+    _buddyLiveSocketSub = null;
+
+    await _buddyLiveSocket?.close();
+    _buddyLiveSocket = null;
+  }
+
+  Future<BuddyDialogResponse> askBuddyLive(
+    String userMessage, [
+    String? systemPrompt,
+  ]) async {
+    try {
+      await startBuddyLiveSession(systemPrompt);
+
+      final socket = _buddyLiveSocket;
+      if (socket == null || !_buddyLiveReady) {
+        return askBuddy(userMessage, systemPrompt);
+      }
+
+      if (_buddyLivePending != null && !_buddyLivePending!.isCompleted) {
+        return askBuddy(userMessage, systemPrompt);
+      }
+
+      _buddyLiveAudioBuilder = BytesBuilder(copy: false);
+      _buddyLiveTextBuffer = StringBuffer();
+      final pending = Completer<BuddyDialogResponse>();
+      _buddyLivePending = pending;
+
+      final payload = {
+        'clientContent': {
+          'turns': [
+            {
+              'role': 'user',
+              'parts': [
+                {'text': userMessage},
+              ],
+            },
+          ],
+          'turnComplete': true,
+        },
+      };
+
+      socket.add(jsonEncode(payload));
+
+      return pending.future.timeout(
+        const Duration(seconds: 35),
+        onTimeout: () {
+          _completeBuddyLivePendingWithFallback();
+          return const BuddyDialogResponse(text: 'Unexpected response format');
+        },
+      );
+    } catch (_) {
+      return askBuddy(userMessage, systemPrompt);
     }
   }
 
@@ -807,6 +1042,128 @@ class GeminiService {
     }
 
     return null;
+  }
+
+  void _handleBuddyLiveMessage(dynamic raw) {
+    Map<String, dynamic>? msg;
+    try {
+      if (raw is String) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          msg = decoded;
+        }
+      }
+    } catch (_) {
+      return;
+    }
+
+    if (msg == null) return;
+
+    if (msg['setupComplete'] != null) {
+      _buddyLiveReady = true;
+      _buddyLiveLastError = null;
+      if (_buddyLiveSetupCompleter != null &&
+          !_buddyLiveSetupCompleter!.isCompleted) {
+        _buddyLiveSetupCompleter!.complete();
+      }
+      return;
+    }
+
+    final serverContent = msg['serverContent'];
+    if (serverContent is! Map<String, dynamic>) {
+      final error = msg['error'];
+      if (error != null) {
+        _buddyLiveLastError = 'Buddy live server error: $error';
+        if (_buddyLiveSetupCompleter != null &&
+            !_buddyLiveSetupCompleter!.isCompleted) {
+          _buddyLiveSetupCompleter!
+              .completeError(StateError(_buddyLiveLastError!));
+        }
+        _completeBuddyLivePendingWithFallback();
+      }
+      return;
+    }
+
+    if (serverContent['interrupted'] == true) {
+      _buddyLiveInterruptedController.add(null);
+    }
+
+    final outputTranscription = serverContent['outputTranscription'];
+    if (outputTranscription is Map<String, dynamic>) {
+      final text = (outputTranscription['text'] ?? '').toString();
+      if (text.isNotEmpty) {
+        _buddyLiveTextBuffer ??= StringBuffer();
+        _buddyLiveTextBuffer!.write(text);
+      }
+    }
+
+    final modelTurn = serverContent['modelTurn'];
+    if (modelTurn is Map<String, dynamic>) {
+      final parts = modelTurn['parts'];
+      if (parts is List) {
+        for (final part in parts) {
+          if (part is! Map<String, dynamic>) continue;
+
+          final text = part['text'];
+          if (text is String && text.trim().isNotEmpty) {
+            _buddyLiveTextBuffer ??= StringBuffer();
+            _buddyLiveTextBuffer!.write(text);
+          }
+
+          final inlineData = part['inlineData'];
+          if (inlineData is! Map<String, dynamic>) continue;
+          final mimeType = (inlineData['mimeType'] ?? '').toString();
+          final dataB64 = (inlineData['data'] ?? '').toString();
+          if (!mimeType.startsWith('audio/') || dataB64.isEmpty) continue;
+
+          try {
+            final bytes = base64Decode(dataB64);
+            if (bytes.isNotEmpty) {
+              _buddyLiveAudioBuilder ??= BytesBuilder(copy: false);
+              _buddyLiveAudioBuilder!.add(bytes);
+            }
+          } catch (_) {
+            // Ignore malformed chunk and continue.
+          }
+        }
+      }
+    }
+
+    if (serverContent['turnComplete'] == true) {
+      final pending = _buddyLivePending;
+      if (pending != null && !pending.isCompleted) {
+        final text = (_buddyLiveTextBuffer?.toString() ?? '').trim();
+        final audioBytes = _buddyLiveAudioBuilder?.takeBytes();
+        pending.complete(
+          BuddyDialogResponse(
+            text: text.isEmpty ? 'Unexpected response format' : text,
+            audioBytes: (audioBytes == null || audioBytes.isEmpty)
+                ? null
+                : audioBytes,
+            audioMimeType:
+                (audioBytes == null || audioBytes.isEmpty) ? null : 'audio/pcm',
+          ),
+        );
+      }
+      _buddyLivePending = null;
+      _buddyLiveAudioBuilder = null;
+      _buddyLiveTextBuffer = null;
+    }
+  }
+
+  void _completeBuddyLivePendingWithFallback() {
+    final pending = _buddyLivePending;
+    if (pending != null && !pending.isCompleted) {
+      pending.complete(const BuddyDialogResponse(text: 'Unexpected response format'));
+    }
+    _buddyLivePending = null;
+    _buddyLiveAudioBuilder = null;
+    _buddyLiveTextBuffer = null;
+  }
+
+  Future<void> disposeBuddyLive() async {
+    await closeBuddyLiveSession();
+    await _buddyLiveInterruptedController.close();
   }
 
 }

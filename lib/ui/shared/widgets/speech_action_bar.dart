@@ -51,15 +51,6 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
         final transcript = (widget.customTranscript ?? speech.currentTranscript).trim();
 
         final isGerman = speech.isGerman;
-        final shadowA = isGerman
-            ? const Color(0xFF000000)
-            : const Color(0xFF012169);
-        final shadowB = isGerman
-            ? const Color(0xFFDD0000)
-            : const Color(0xFFC8102E);
-        final borderColor = isGerman
-            ? const Color(0xFFFFCE00)
-            : const Color(0xFFEEEEEE);
 
         return Container(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
@@ -115,7 +106,31 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const SizedBox(width: 44),
+                  GestureDetector(
+                    onTap: () => speech.toggleLanguage(),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isGerman
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        isGerman ? 'DE' : 'EN',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isGerman
+                              ? Theme.of(context).colorScheme.onPrimaryContainer
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
                   BuddyMicButton(
                     isRecording: isVoiceActive,
                     voiceLevel: voiceLevel,
@@ -130,71 +145,16 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
                       ? _stopCustomVoice()
                       : _stopListeningAndSubmit(context),
                   ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: speech.toggleLanguage,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutQuad,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            color: Theme.of(context).colorScheme.surface,
-                            border: Border.all(color: borderColor, width: 1.2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: shadowA.withOpacity(0.35),
-                                blurRadius: 8,
-                                spreadRadius: 1,
-                                offset: const Offset(0, 2),
-                              ),
-                              BoxShadow(
-                                color: shadowB.withOpacity(0.35),
-                                blurRadius: 12,
-                                spreadRadius: 0.5,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.language,
-                                size: 14,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                isGerman ? 'DE' : 'EN',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      IconButton.filledTonal(
-                        onPressed: () => _showInputSheet(context),
-                        icon: const Icon(Icons.keyboard_alt_outlined, size: 20),
-                        tooltip: 'Keyboard',
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.all(10),
-                        constraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
-                      ),
-                    ],
+                  IconButton.filledTonal(
+                    onPressed: () => _showInputSheet(context),
+                    icon: const Icon(Icons.keyboard_alt_outlined, size: 20),
+                    tooltip: 'Keyboard',
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(10),
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
                   ),
                 ],
               ),
@@ -274,6 +234,10 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
 
   Future<void> _startListening(BuildContext context) async {
     final speech = context.read<SpeechProvider>();
+    // Clear stale transcript immediately (sync) before any async gap so that
+    // onLongPressEnd / _stopListeningAndSubmit cannot read the old message
+    // from a prior session if it fires before startListening() runs.
+    speech.clearTranscript();
     await speech.ensureInitialized();
 
     if (!speech.speechReady) {
@@ -303,30 +267,24 @@ class _SpeechActionBarState extends State<SpeechActionBar> {
       return;
     }
 
-    // If recognition auto-stopped and words are still present, submit them
-    // before starting a new session so valid transcripts are not lost.
-    final pending = speech.currentTranscript.trim();
-    if (pending.isNotEmpty) {
-      await widget.onSubmitted(pending);
-      if (!mounted) return;
-      speech.clearTranscript();
-      return;
-    }
-
+    // Clear any stale transcript from a previous session before starting fresh.
+    speech.clearTranscript();
     await _startListening(context);
   }
 
   Future<void> _stopListeningAndSubmit(BuildContext context) async {
     final speech = context.read<SpeechProvider>();
-    final preStopText = speech.currentTranscript.trim();
-    final preStopHeardText = speech.lastRecognizedText.trim();
+    // Only submit if STT was actually running when this was called.
+    final wasListening = speech.isListening;
+    final preStopText = wasListening ? speech.currentTranscript.trim() : '';
+    final preStopHeardText = wasListening ? speech.lastRecognizedText.trim() : '';
 
     final captured = await speech.stopListeningAndCollect();
     if (!mounted) return;
 
     final postStopText = captured?.text.trim() ?? '';
-    final fallbackText = speech.currentTranscript.trim();
-    final heardFallbackText = speech.lastRecognizedText.trim();
+    final fallbackText = wasListening ? speech.currentTranscript.trim() : '';
+    final heardFallbackText = wasListening ? speech.lastRecognizedText.trim() : '';
     final text = postStopText.isNotEmpty
         ? postStopText
         : (preStopText.isNotEmpty

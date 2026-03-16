@@ -36,6 +36,7 @@ class _BuddyScreenState extends State<BuddyScreen> {
   int _lastPlayedAudioToken = 0;
   bool _didInitialBottomJump = false;
   String? _lastSpokenAiText;
+  int _lastInterruptToken = 0;
 
   void _scrollToBottom({required bool animate}) {
     if (!_scrollController.hasClients) return;
@@ -63,6 +64,10 @@ class _BuddyScreenState extends State<BuddyScreen> {
     _tts.setSpeechRate(0.45);
     _tts.awaitSpeakCompletion(false);
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyVoiceSettings());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ChatProvider>().prepareBuddyLiveSession();
+    });
   }
 
   Future<void> _applyVoiceSettings() async {
@@ -166,6 +171,14 @@ class _BuddyScreenState extends State<BuddyScreen> {
     // obtain messages from provider
     return Consumer<ChatProvider>(builder: (context, chat, _) {
       final entries = chat.messages;
+
+      if (chat.buddyInterruptToken > _lastInterruptToken) {
+        _lastInterruptToken = chat.buddyInterruptToken;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await _nativeAudioPlayer.stop();
+          await _tts.stop();
+        });
+      }
 
       // Establish baseline on first render so historical messages are not
       // spoken when opening/reopening the page.

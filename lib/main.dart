@@ -46,7 +46,7 @@ class MainApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, __) {
           return MaterialApp(
-            title: 'WunderbarAI',
+            title: 'Kumpel AI',
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: themeProvider.mode,
