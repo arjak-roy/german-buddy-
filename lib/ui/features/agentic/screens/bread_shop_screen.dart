@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:provider/provider.dart';
 import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../../../data/models/bread_shop_transaction.dart';
 import '../../../../data/services/gemini_service.dart';
-import '../../../../providers/speech_provider.dart';
-import '../../../../providers/voice_provider.dart';
+import '../../../../providers/app_providers.dart';
 import '../../../shared/widgets/speech_action_bar.dart';
 
-class BreadShopScreen extends StatefulWidget {
+class BreadShopScreen extends ConsumerStatefulWidget {
   const BreadShopScreen({super.key});
 
   @override
-  State<BreadShopScreen> createState() => _BreadShopScreenState();
+  ConsumerState<BreadShopScreen> createState() => _BreadShopScreenState();
 }
 
-class _BreadShopScreenState extends State<BreadShopScreen>
+class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
     with TickerProviderStateMixin {
   final GeminiService _bakery = GeminiService();
   late final FlutterTts _tts;
@@ -169,7 +168,7 @@ class _BreadShopScreenState extends State<BreadShopScreen>
 
   Future<void> _applyVoiceSettings() async {
     if (!mounted) return;
-    final vp = context.read<VoiceProvider>();
+    final vp = ref.read(voiceProviderNotifier);
     await vp.loadVoices();
     if (!mounted) return;
     await vp.applyTo(_tts);
@@ -187,7 +186,7 @@ class _BreadShopScreenState extends State<BreadShopScreen>
     });
   }
 
-  bool _isGermanUi() => context.read<SpeechProvider>().isGerman;
+  bool _isGermanUi() => ref.read(speechProviderNotifier).isGerman;
 
   // Kept for reference; TTS is now inlined in _handleUtterance to avoid
   // calling context.read across an async gap.
@@ -201,7 +200,7 @@ class _BreadShopScreenState extends State<BreadShopScreen>
 
     // Capture locale and providers before any async gap
     final isGerman = _isGermanUi();
-    final voiceProvider = context.read<VoiceProvider>();
+    final voiceProvider = ref.read(voiceProviderNotifier);
 
     setState(() {
       _isLoading = true;

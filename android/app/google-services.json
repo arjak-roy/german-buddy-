@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "381763033963",
+    "project_id": "language-buddy-a626a",
+    "storage_bucket": "language-buddy-a626a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:381763033963:android:12b3ca0eecf2f62fed8a2e",
+        "android_client_info": {
+          "package_name": "com.example.wunderbarai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "381763033963-8afglse7nad3077tjse2sd6ecr7lqnqu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJW9qL02gFtZEi6lMRoKLlR1PSXyk0BS4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "381763033963-8afglse7nad3077tjse2sd6ecr7lqnqu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "381763033963-o5po8dv6eh785a6ti00ctvpmjfqdg62b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.wunderbarai"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

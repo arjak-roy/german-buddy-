@@ -1,73 +1,50 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/utils/firebase_bootstrap.dart';
 import 'core/theme/app_theme.dart';
-import 'providers/theme_provider.dart';
-import 'providers/auth_provider.dart';
-import 'providers/user_provider.dart';
-import 'providers/chat_provider.dart';
-import 'providers/ai_provider.dart';
-import 'providers/pronunciation_analysis_provider.dart';
-import 'providers/pronunciation_recording_provider.dart';
-import 'providers/speech_provider.dart';
-import 'providers/voice_provider.dart';
+import 'providers/app_providers.dart';
 import 'ui/features/auth/screens/login_screen.dart';
 import 'ui/features/home/screens/home_screen.dart';
 
-void main() {
-  runApp(const MainApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FirebaseBootstrap.ensureInitialized();
+  runApp(const ProviderScope(child: MainApp()));
 }
 
-/// Root of the application. Uses [MultiProvider] to register global
-/// state objects. The theme provider is loaded first so that other
-/// widgets (including those built during navigation) can read the
-/// correct theme mode.
-class MainApp extends StatelessWidget {
+/// Root of the application.
+class MainApp extends ConsumerWidget {
   const MainApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
-        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
-        ChangeNotifierProvider<ChatProvider>(create: (_) => ChatProvider()),
-        ChangeNotifierProvider<AiProvider>(create: (_) => AiProvider()),
-        ChangeNotifierProvider<PronunciationAnalysisProvider>(
-          create: (_) => PronunciationAnalysisProvider(),
-        ),
-        ChangeNotifierProvider<PronunciationRecordingProvider>(
-          create: (_) => PronunciationRecordingProvider(),
-        ),
-        ChangeNotifierProvider<SpeechProvider>(create: (_) => SpeechProvider()),
-        ChangeNotifierProvider<VoiceProvider>(create: (_) => VoiceProvider()),
-      ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, __) {
-          return MaterialApp(
-            title: 'Kumpel AI',
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: themeProvider.mode,
-            home: const EntryPoint(),
-          );
-        },
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProviderNotifier);
+
+    return MaterialApp(
+      title: 'Kumpel AI',
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: theme.mode,
+      home: const EntryPoint(),
     );
   }
 }
 
 /// Decides which screen to show based on authentication state.
-class EntryPoint extends StatelessWidget {
+class EntryPoint extends ConsumerWidget {
   const EntryPoint({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    if (auth.loggedIn) {
-      return const HomeScreen();
-    }
-    return const LoginScreen();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authSession = ref.watch(authSessionProvider);
+
+    return authSession.when(
+      data: (user) => user != null ? const HomeScreen() : const LoginScreen(),
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stackTrace) => const LoginScreen(),
+    );
   }
 }

@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../providers/theme_provider.dart';
+import '../../../providers/app_providers.dart';
 
-class ThemeModeButton extends StatelessWidget {
+class ThemeModeButton extends ConsumerWidget {
   const ThemeModeButton({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeProvider = ref.watch(themeProviderNotifier);
 
     return IconButton(
       tooltip: themeProvider.isDark ? 'Switch to light mode' : 'Switch to dark mode',
-      onPressed: () => context.read<ThemeProvider>().toggle(),
+      onPressed: () => ref.read(themeProviderNotifier).toggle(),
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.all(8),
       constraints: const BoxConstraints(minWidth: 40, minHeight: 40),

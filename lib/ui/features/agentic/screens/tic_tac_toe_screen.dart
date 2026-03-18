@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:provider/provider.dart';
 import 'package:confetti/confetti.dart';
 
 import '../../../../data/services/gemini_service.dart';
-import '../../../../providers/speech_provider.dart';
+import '../../../../providers/app_providers.dart';
 import '../../../shared/widgets/speech_action_bar.dart';
 
-class TicTacToeScreen extends StatefulWidget {
+class TicTacToeScreen extends ConsumerStatefulWidget {
   const TicTacToeScreen({super.key});
 
   @override
-  State<TicTacToeScreen> createState() => _TicTacToeScreenState();
+  ConsumerState<TicTacToeScreen> createState() => _TicTacToeScreenState();
 }
 
-class _TicTacToeScreenState extends State<TicTacToeScreen> {
+class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
   static const String _playerMark = 'X';
   static const String _agentMark = 'O';
   static const List<List<int>> _winningLines = [
@@ -464,7 +464,7 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
   }
 
   bool _isGermanUi(BuildContext context) {
-    return context.read<SpeechProvider>().isGerman;
+    return ref.read(speechProviderNotifier).isGerman;
   }
 
   Future<void> _speakGermanHint(String text) async {
@@ -480,7 +480,7 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final speech = context.watch<SpeechProvider>();
+    final speech = ref.watch(speechProviderNotifier);
     final isGerman = speech.isGerman;
     final showDebug = speech.showDebugPanel;
 
@@ -493,7 +493,7 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
             tooltip: showDebug
                 ? 'Hide STT debug panel'
                 : 'Show STT debug panel',
-            onPressed: () => context.read<SpeechProvider>().toggleDebugPanel(),
+            onPressed: () => ref.read(speechProviderNotifier).toggleDebugPanel(),
           ),
           IconButton(
             onPressed: () => _resetGame(),

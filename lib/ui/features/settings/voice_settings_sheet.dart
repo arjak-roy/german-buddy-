@@ -1,36 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../providers/voice_provider.dart';
+import '../../../providers/app_providers.dart';
 
 /// Bottom sheet that lists available German TTS voices and lets the user
 /// pick one. Use [VoiceSettingsSheet.show] to display it.
-class VoiceSettingsSheet extends StatefulWidget {
+class VoiceSettingsSheet extends ConsumerStatefulWidget {
   const VoiceSettingsSheet({super.key});
 
   /// Shows the voice-picker bottom sheet, passing [VoiceProvider] explicitly
   /// so the sheet works even when built in a separate navigator subtree.
   static Future<void> show(BuildContext context) {
-    final vp = context.read<VoiceProvider>();
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => ChangeNotifierProvider.value(
-        value: vp,
-        child: const VoiceSettingsSheet(),
-      ),
+      builder: (_) => const VoiceSettingsSheet(),
     );
   }
 
   @override
-  State<VoiceSettingsSheet> createState() => _VoiceSettingsSheetState();
+  ConsumerState<VoiceSettingsSheet> createState() => _VoiceSettingsSheetState();
 }
 
-class _VoiceSettingsSheetState extends State<VoiceSettingsSheet> {
+class _VoiceSettingsSheetState extends ConsumerState<VoiceSettingsSheet> {
   FlutterTts? _preview;
   bool _previewing = false;
 
@@ -40,7 +36,7 @@ class _VoiceSettingsSheetState extends State<VoiceSettingsSheet> {
     // Trigger loading on first open; no-op if already loaded.
     Future.microtask(() {
       if (!mounted) return;
-      context.read<VoiceProvider>().loadVoices();
+      ref.read(voiceProviderNotifier).loadVoices();
     });
   }
 
@@ -66,7 +62,7 @@ class _VoiceSettingsSheetState extends State<VoiceSettingsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final vp = context.watch<VoiceProvider>();
+    final vp = ref.watch(voiceProviderNotifier);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 

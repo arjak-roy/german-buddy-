@@ -1,10 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:provider/provider.dart';
 
 import '../../../../data/services/gemini_service.dart';
+import '../../../../providers/app_providers.dart';
 import '../../../../providers/introduce_yourself_practice_provider.dart';
 import '../../../../providers/speech_provider.dart';
 import '../../pronunciation/models/pronunciation_item.dart';
@@ -49,6 +50,13 @@ const Set<String> _introduceYourselfIgnoredWords = {
   '...'
 };
 
+final introduceYourselfPracticeProviderNotifier =
+    ChangeNotifierProvider.autoDispose<IntroduceYourselfPracticeProvider>((ref) {
+  throw UnimplementedError(
+    'introduceYourselfPracticeProviderNotifier must be overridden in ProviderScope.',
+  );
+});
+
 class SpeakingExerciseScreen extends StatelessWidget {
   final SpeakingExerciseItem item;
 
@@ -59,10 +67,14 @@ class SpeakingExerciseScreen extends StatelessWidget {
     final isIntroduceYourself = item.title.toLowerCase() == 'introduce yourself';
 
     if (isIntroduceYourself) {
-      return ChangeNotifierProvider<IntroduceYourselfPracticeProvider>(
-        create: (_) => IntroduceYourselfPracticeProvider(
-          script: _introduceYourselfScript,
-        ),
+      return ProviderScope(
+        overrides: [
+          introduceYourselfPracticeProviderNotifier.overrideWith(
+            (ref) => IntroduceYourselfPracticeProvider(
+              script: _introduceYourselfScript,
+            ),
+          ),
+        ],
         child: _IntroduceYourselfExerciseScreen(item: item),
       );
     }
@@ -180,18 +192,18 @@ class _GenericSpeakingExerciseScreen extends StatelessWidget {
   }
 }
 
-class _IntroduceYourselfExerciseScreen extends StatefulWidget {
+class _IntroduceYourselfExerciseScreen extends ConsumerStatefulWidget {
   final SpeakingExerciseItem item;
 
   const _IntroduceYourselfExerciseScreen({required this.item});
 
   @override
-  State<_IntroduceYourselfExerciseScreen> createState() =>
+  ConsumerState<_IntroduceYourselfExerciseScreen> createState() =>
       _IntroduceYourselfExerciseScreenState();
 }
 
 class _IntroduceYourselfExerciseScreenState
-    extends State<_IntroduceYourselfExerciseScreen> {
+    extends ConsumerState<_IntroduceYourselfExerciseScreen> {
   late final FlutterTts _tts;
   final GeminiService _gemini = GeminiService();
   bool _isAnalyzingSession = false;
@@ -205,7 +217,7 @@ class _IntroduceYourselfExerciseScreenState
   @override
   void initState() {
     super.initState();
-    final practice = context.read<IntroduceYourselfPracticeProvider>();
+    final practice = ref.read(introduceYourselfPracticeProviderNotifier);
     _tts = FlutterTts();
     _tts.setLanguage('de-DE');
     _tts.setSpeechRate(practice.ttsSpeed);
@@ -213,23 +225,23 @@ class _IntroduceYourselfExerciseScreenState
     _tts.awaitSpeakCompletion(false);
     _tts.setStartHandler(() {
       if (!mounted) return;
-      context.read<IntroduceYourselfPracticeProvider>().setTtsStarted();
+      ref.read(introduceYourselfPracticeProviderNotifier).setTtsStarted();
     });
     _tts.setCompletionHandler(() {
       if (!mounted) return;
-      context.read<IntroduceYourselfPracticeProvider>().setTtsStopped();
+      ref.read(introduceYourselfPracticeProviderNotifier).setTtsStopped();
     });
     _tts.setCancelHandler(() {
       if (!mounted) return;
-      context.read<IntroduceYourselfPracticeProvider>().setTtsStopped();
+      ref.read(introduceYourselfPracticeProviderNotifier).setTtsStopped();
     });
     _tts.setErrorHandler((_) {
       if (!mounted) return;
-      context.read<IntroduceYourselfPracticeProvider>().setTtsStopped();
+      ref.read(introduceYourselfPracticeProviderNotifier).setTtsStopped();
     });
     _tts.setProgressHandler((text, startOffset, endOffset, _) {
       if (!mounted) return;
-      final practice = context.read<IntroduceYourselfPracticeProvider>();
+      final practice = ref.read(introduceYourselfPracticeProviderNotifier);
       final spans = _wordSpans(text);
       if (spans.isEmpty) return;
 
@@ -258,7 +270,7 @@ class _IntroduceYourselfExerciseScreenState
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final speech = context.read<SpeechProvider>();
+      final speech = ref.read(speechProviderNotifier);
       speech.setLanguage(SpeechLanguage.german);
       speech.clearTranscript();
       speech.ensureInitialized();
@@ -365,12 +377,12 @@ class _IntroduceYourselfExerciseScreenState
 
   void _goToPreviousSentence(SpeechProvider speech) {
     speech.clearTranscript();
-    context.read<IntroduceYourselfPracticeProvider>().goToPreviousSentence();
+    ref.read(introduceYourselfPracticeProviderNotifier).goToPreviousSentence();
   }
 
   void _goToNextSentence(SpeechProvider speech) {
     speech.clearTranscript();
-    final practice = context.read<IntroduceYourselfPracticeProvider>();
+    final practice = ref.read(introduceYourselfPracticeProviderNotifier);
     final moved = practice.goToNextSentence();
     if (!moved && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -382,11 +394,13 @@ class _IntroduceYourselfExerciseScreenState
   }
 
   Future<void> _toggleListening(SpeechProvider speech) async {
-    if (context.read<IntroduceYourselfPracticeProvider>().isCompleted) return;
+    if (ref.read(introduceYourselfPracticeProviderNotifier).isCompleted) return;
     if (speech.isListening) {
       final capture = await speech.stopListeningAndCollect();
       if ((capture?.text.trim().isNotEmpty ?? false) && mounted) {
-        context.read<IntroduceYourselfPracticeProvider>().markCurrentSentenceAttempted();
+        ref
+            .read(introduceYourselfPracticeProviderNotifier)
+            .markCurrentSentenceAttempted();
       }
       return;
     }
@@ -1032,14 +1046,16 @@ class _IntroduceYourselfExerciseScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final practice = ref.watch(introduceYourselfPracticeProviderNotifier);
+    final speech = ref.watch(speechProviderNotifier);
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.item.title)),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Consumer2<IntroduceYourselfPracticeProvider, SpeechProvider>(
-            builder: (context, practice, speech, _) {
+          child: LayoutBuilder(
+            builder: (context, constraints) {
               final isAnalysisCard = practice.isCompleted;
               final sentence = practice.currentSentence;
               final sentenceWordSpans = _wordSpans(sentence);
@@ -1094,8 +1110,6 @@ class _IntroduceYourselfExerciseScreenState
                 }
               }
 
-              return LayoutBuilder(
-                builder: (context, constraints) {
                   final compact = constraints.maxHeight < 760;
                   final sectionGap = compact ? 8.0 : 12.0;
                   final centerFlex = compact ? 7 : 8;
@@ -1489,8 +1503,6 @@ class _IntroduceYourselfExerciseScreenState
                       ],
                     ],
                   );
-                },
-              );
             },
           ),
         ),

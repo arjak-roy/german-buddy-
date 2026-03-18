@@ -1,27 +1,26 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:provider/provider.dart';
 
 import '../../../../data/models/pronunciation_analysis_report.dart';
-import '../../../../providers/pronunciation_analysis_provider.dart';
-import '../../../../providers/pronunciation_recording_provider.dart';
-import '../../../../providers/voice_provider.dart';
+import '../../../../providers/app_providers.dart';
 import '../../buddy/widgets/buddy_mic_button.dart';
 import '../models/pronunciation_item.dart';
 
-class PronunciationLessonScreen extends StatefulWidget {
+class PronunciationLessonScreen extends ConsumerStatefulWidget {
   final PronunciationItem item;
 
   const PronunciationLessonScreen({required this.item, super.key});
 
   @override
-  State<PronunciationLessonScreen> createState() =>
+  ConsumerState<PronunciationLessonScreen> createState() =>
       _PronunciationLessonScreenState();
 }
 
-class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
+class _PronunciationLessonScreenState
+    extends ConsumerState<PronunciationLessonScreen> {
   static const _panelTitle = Color(0xFF0F172A);
   static const _panelBody = Color(0xFF334155);
   static const _panelMuted = Color(0xFF64748B);
@@ -59,8 +58,8 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final recorder = context.read<PronunciationRecordingProvider>();
-      final analysis = context.read<PronunciationAnalysisProvider>();
+      final recorder = ref.read(pronunciationRecordingProviderNotifier);
+      final analysis = ref.read(pronunciationAnalysisProviderNotifier);
       analysis.selectWord(widget.item);
       recorder.initializePlayback();
       recorder.prepareForWord(widget.item.german);
@@ -69,7 +68,7 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
 
   Future<void> _applyVoiceSettings() async {
     if (!mounted) return;
-    final vp = context.read<VoiceProvider>();
+    final vp = ref.read(voiceProviderNotifier);
     await vp.loadVoices();
     if (!mounted) return;
     await vp.applyTo(_tts);
@@ -141,7 +140,7 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   }
 
   Future<void> _startRecording(BuildContext context) async {
-    final recorder = context.read<PronunciationRecordingProvider>();
+    final recorder = ref.read(pronunciationRecordingProviderNotifier);
     final started = await recorder.startRecording();
     if (!mounted) return;
     if (!started && recorder.error != null) {
@@ -159,7 +158,7 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   }
 
   Future<void> _stopRecording(BuildContext context) async {
-    final recorder = context.read<PronunciationRecordingProvider>();
+    final recorder = ref.read(pronunciationRecordingProviderNotifier);
     final stopped = await recorder.stopRecording();
     if (!mounted) return;
     if (!stopped && recorder.error != null) {
@@ -179,7 +178,7 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   }
 
   Future<void> _toggleRecordedAudioPlayback(BuildContext context) async {
-    final recorder = context.read<PronunciationRecordingProvider>();
+    final recorder = ref.read(pronunciationRecordingProviderNotifier);
     final played = await recorder.togglePlayback();
     if (!mounted) return;
     if (!played && recorder.error != null) {
@@ -190,8 +189,8 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   }
 
   Future<void> _confirmAndAnalyze(BuildContext context) async {
-    final recorder = context.read<PronunciationRecordingProvider>();
-    final analysis = context.read<PronunciationAnalysisProvider>();
+    final recorder = ref.read(pronunciationRecordingProviderNotifier);
+    final analysis = ref.read(pronunciationAnalysisProviderNotifier);
     final path = recorder.recordedFilePath;
     if (path == null) return;
 
@@ -213,7 +212,7 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   }
 
   Future<void> _recordAgain(BuildContext context) async {
-    final recorder = context.read<PronunciationRecordingProvider>();
+    final recorder = ref.read(pronunciationRecordingProviderNotifier);
     await recorder.clearRecording();
     if (!mounted) return;
     setState(() {
@@ -222,8 +221,8 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   }
 
   Future<void> _retryWord(BuildContext context) async {
-    final recorder = context.read<PronunciationRecordingProvider>();
-    final analysis = context.read<PronunciationAnalysisProvider>();
+    final recorder = ref.read(pronunciationRecordingProviderNotifier);
+    final analysis = ref.read(pronunciationAnalysisProviderNotifier);
     await recorder.clearRecording();
     analysis.clearTransientState();
     if (!mounted) return;
@@ -236,8 +235,8 @@ class _PronunciationLessonScreenState extends State<PronunciationLessonScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final recorder = context.watch<PronunciationRecordingProvider>();
-    final analysis = context.watch<PronunciationAnalysisProvider>();
+    final recorder = ref.watch(pronunciationRecordingProviderNotifier);
+    final analysis = ref.watch(pronunciationAnalysisProviderNotifier);
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.item.german)),

@@ -1,18 +1,73 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Placeholder authentication provider.
-class AuthProvider extends ChangeNotifier {
-  bool _loggedIn = true; // Start as logged in for testing
+import '../data/models/app_user.dart';
+import '../data/repositories/auth_repository.dart';
+import '../data/repositories/firebase_auth_repository.dart';
 
-  bool get loggedIn => _loggedIn;
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  return FirebaseAuthRepository();
+});
 
-  void login() {
-    _loggedIn = true;
-    notifyListeners();
+final authSessionProvider = StreamProvider<AppUser?>((ref) {
+  final repository = ref.watch(authRepositoryProvider);
+  return repository.authStateChanges;
+});
+
+final authControllerProvider = NotifierProvider<AuthController, AsyncValue<void>>(
+  AuthController.new,
+);
+
+class AuthController extends Notifier<AsyncValue<void>> {
+  @override
+  AsyncValue<void> build() {
+    return const AsyncValue.data(null);
   }
 
-  void logout() {
-    _loggedIn = false;
-    notifyListeners();
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {
+    final repository = ref.read(authRepositoryProvider);
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() {
+      return repository.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    });
+  }
+
+  Future<void> signUp({
+    required String email,
+    required String password,
+  }) async {
+    final repository = ref.read(authRepositoryProvider);
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() {
+      return repository.signUpWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    });
+  }
+
+  Future<void> signInWithGoogle() async {
+    final repository = ref.read(authRepositoryProvider);
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(repository.signInWithGoogle);
+  }
+
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    final repository = ref.read(authRepositoryProvider);
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() {
+      return repository.sendPasswordResetEmail(email: email.trim());
+    });
+  }
+
+  Future<void> signOut() async {
+    final repository = ref.read(authRepositoryProvider);
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(repository.signOut);
   }
 }

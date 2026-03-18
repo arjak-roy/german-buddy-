@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../providers/chat_provider.dart';
+import '../../../../providers/app_providers.dart';
 import '../../../shared/widgets/speech_action_bar.dart';
 
-class BottomMic extends StatelessWidget {
+class BottomMic extends ConsumerWidget {
   const BottomMic({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SpeechActionBar(
       onSubmitted: (text) async {
-        await context.read<ChatProvider>().sendMessage(text);
+        await ref.read(chatProviderNotifier).sendMessage(text);
       },
     );
   }

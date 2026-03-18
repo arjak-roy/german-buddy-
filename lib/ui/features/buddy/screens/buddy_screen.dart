@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:wunderbarai/providers/chat_provider.dart';
-import 'package:wunderbarai/providers/voice_provider.dart';
 import 'dart:typed_data';
 
 import '../widgets/chat_bubble.dart';
 import '../widgets/buddy_app_bar.dart';
 import '../widgets/bottom_mic.dart';
-import 'package:provider/provider.dart';
+import '../../../../providers/app_providers.dart';
 
 /// Represents the interactive conversation screen with Buddy. A hero
 /// animation is used on the mic button so pushing this route from the
 /// home page appears seamless.
-class BuddyScreen extends StatefulWidget {
+class BuddyScreen extends ConsumerStatefulWidget {
   /// When used as a tab page inside the home scaffold we don't want to
   /// create another [Scaffold] (nested scaffolds cause layout issues). In
   /// that case set [embedded] to true and only the inner content is
@@ -25,10 +25,10 @@ class BuddyScreen extends StatefulWidget {
   const BuddyScreen({super.key, this.embedded = false});
 
   @override
-  State<BuddyScreen> createState() => _BuddyScreenState();
+  ConsumerState<BuddyScreen> createState() => _BuddyScreenState();
 }
 
-class _BuddyScreenState extends State<BuddyScreen> {
+class _BuddyScreenState extends ConsumerState<BuddyScreen> {
   late final ScrollController _scrollController;
   late final FlutterTts _tts;
   late final AudioPlayer _nativeAudioPlayer;
@@ -66,13 +66,13 @@ class _BuddyScreenState extends State<BuddyScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyVoiceSettings());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<ChatProvider>().prepareBuddyLiveSession();
+      ref.read(chatProviderNotifier).prepareBuddyLiveSession();
     });
   }
 
   Future<void> _applyVoiceSettings() async {
     if (!mounted) return;
-    final vp = context.read<VoiceProvider>();
+    final vp = ref.read(voiceProviderNotifier);
     await vp.loadVoices();
     if (!mounted) return;
     await vp.applyTo(_tts);
@@ -168,127 +168,124 @@ class _BuddyScreenState extends State<BuddyScreen> {
   }
 
   Widget _buildContent() {
-    // obtain messages from provider
-    return Consumer<ChatProvider>(builder: (context, chat, _) {
-      final entries = chat.messages;
+    final chat = ref.watch(chatProviderNotifier);
+    final entries = chat.messages;
 
-      if (chat.buddyInterruptToken > _lastInterruptToken) {
-        _lastInterruptToken = chat.buddyInterruptToken;
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await _nativeAudioPlayer.stop();
-          await _tts.stop();
-        });
-      }
+    if (chat.buddyInterruptToken > _lastInterruptToken) {
+      _lastInterruptToken = chat.buddyInterruptToken;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _nativeAudioPlayer.stop();
+        await _tts.stop();
+      });
+    }
 
-      // Establish baseline on first render so historical messages are not
-      // spoken when opening/reopening the page.
-      if (_lastCount == -1) {
-        _lastCount = entries.length;
-      }
+    // Establish baseline on first render so historical messages are not
+    // spoken when opening/reopening the page.
+    if (_lastCount == -1) {
+      _lastCount = entries.length;
+    }
 
-      if (!_didInitialBottomJump && entries.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToBottom(animate: false);
-        });
-        _didInitialBottomJump = true;
-      }
+    if (!_didInitialBottomJump && entries.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom(animate: false);
+      });
+      _didInitialBottomJump = true;
+    }
 
-      if (entries.isEmpty) {
-        // show onboarding hint but keep mic accessible
-        return Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Text(
-                    'Try saying "Hello buddy" in German',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontSize: 16,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ),
-            if (widget.embedded) const BottomMic(),
-          ],
-        );
-      }
-
-      // if new message added, scroll to bottom after frame
-      if (entries.length > _lastCount) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToBottom(animate: true);
-        });
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _playLatestAiMessage(entries, chat);
-        });
-
-        _lastCount = entries.length;
-      }
-
-      if (widget.embedded) {
-        // floating mic at bottom over the scrollable list
-        return Stack(
-          children: [
-            SafeArea(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 118),
-                itemCount: entries.length + (chat.isLoading ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index < entries.length) {
-                    final e = entries[index];
-                    return ChatMessage(
-                      text: e.text,
-                      translated: e.translated,
-                      isUser: e.isUser,
-                    );
-                  }
-                  // loading placeholder bubble
-                  return const ChatMessage(
-                    text: 'Buddy is thinking...',
-                    isUser: false,
-                  );
-                },
-              ),
-            ),
-                  Positioned(
-              bottom: 16,
-              left: 0,
-              right: 0,
-              child: Center(child: const BottomMic()),
-            ),
-          ],
-        );
-      }
-
+    if (entries.isEmpty) {
+      // show onboarding hint but keep mic accessible
       return Column(
         children: [
           Expanded(
-            child: SafeArea(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                itemCount: entries.length,
-                itemBuilder: (context, index) {
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Text(
+                  'Try saying "Hello buddy" in German',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+          if (widget.embedded) const BottomMic(),
+        ],
+      );
+    }
+
+    // if new message added, scroll to bottom after frame
+    if (entries.length > _lastCount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom(animate: true);
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _playLatestAiMessage(entries, chat);
+      });
+
+      _lastCount = entries.length;
+    }
+
+    if (widget.embedded) {
+      // floating mic at bottom over the scrollable list
+      return Stack(
+        children: [
+          SafeArea(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(12, 16, 12, 118),
+              itemCount: entries.length + (chat.isLoading ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index < entries.length) {
                   final e = entries[index];
                   return ChatMessage(
                     text: e.text,
                     translated: e.translated,
                     isUser: e.isUser,
                   );
-                },
-              ),
+                }
+                // loading placeholder bubble
+                return const ChatMessage(
+                  text: 'Buddy is thinking...',
+                  isUser: false,
+                );
+              },
             ),
+          ),
+          const Positioned(
+            bottom: 16,
+            left: 0,
+            right: 0,
+            child: Center(child: BottomMic()),
           ),
         ],
       );
-    });
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: SafeArea(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+              itemCount: entries.length,
+              itemBuilder: (context, index) {
+                final e = entries[index];
+                return ChatMessage(
+                  text: e.text,
+                  translated: e.translated,
+                  isUser: e.isUser,
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override

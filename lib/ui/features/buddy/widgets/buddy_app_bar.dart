@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../providers/speech_provider.dart';
+import '../../../../providers/app_providers.dart';
 import '../../../shared/widgets/theme_mode_button.dart';
 
-class BuddyAppBar extends StatelessWidget implements PreferredSizeWidget {
+class BuddyAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const BuddyAppBar({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final showDebug = context.watch<SpeechProvider>().showDebugPanel;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showDebug = ref.watch(speechProviderNotifier).showDebugPanel;
     final scheme = Theme.of(context).colorScheme;
 
     return AppBar(
@@ -44,7 +44,7 @@ class BuddyAppBar extends StatelessWidget implements PreferredSizeWidget {
         IconButton(
           icon: Icon(showDebug ? Icons.bug_report : Icons.info_outline),
           tooltip: showDebug ? 'Hide STT debug panel' : 'Show STT debug panel',
-          onPressed: () => context.read<SpeechProvider>().toggleDebugPanel(),
+          onPressed: () => ref.read(speechProviderNotifier).toggleDebugPanel(),
         ),
       ],
     );
