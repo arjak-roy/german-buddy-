@@ -9,10 +9,19 @@ class BottomMic extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final chat = ref.watch(chatProviderNotifier);
+
     return SpeechActionBar(
       onSubmitted: (text) async {
         await ref.read(chatProviderNotifier).sendMessage(text);
       },
+      onCustomVoiceStart: () =>
+          ref.read(chatProviderNotifier).startBuddyVoiceTurn(),
+      onCustomVoiceStop: () =>
+          ref.read(chatProviderNotifier).stopBuddyVoiceTurn(),
+      isCustomVoiceActive: chat.isBuddyVoiceActive,
+      customVoiceLevel: chat.isBuddyVoiceActive ? 1.0 : 0.0,
+      customTranscript: chat.buddyVoiceTranscript,
     );
   }
 }

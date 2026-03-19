@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:record/record.dart';
 
 import '../data/models/chat_entry.dart';
 import '../data/services/gemini_service.dart';
@@ -24,12 +25,18 @@ class ChatProvider extends ChangeNotifier {
 
   bool _isBuddyPreparing = false;
   bool _isBuddyLiveReady = false;
+  bool _isBuddyVoiceActive = false;
+  bool _isBuddyVoiceStopping = false;
+  String _buddyVoiceTranscript = '';
   int _buddyInterruptToken = 0;
   Future<void>? _buddyPrepareFuture;
   String? _buddyLiveError;
 
   bool get isBuddyPreparing => _isBuddyPreparing;
   bool get isBuddyLiveReady => _isBuddyLiveReady;
+  bool get isBuddyVoiceActive => _isBuddyVoiceActive;
+  bool get isBuddyVoiceStopping => _isBuddyVoiceStopping;
+  String get buddyVoiceTranscript => _buddyVoiceTranscript;
   int get buddyInterruptToken => _buddyInterruptToken;
   String? get buddyLiveError => _buddyLiveError;
 
@@ -47,6 +54,7 @@ class ChatProvider extends ChangeNotifier {
 
   // service used to query the language model
   final GeminiService _service = GeminiService();
+  final AudioRecorder _buddyAudioRecorder = AudioRecorder();
   StreamSubscription<void>? _buddyInterruptSub;
 
   ChatProvider() {
@@ -88,8 +96,11 @@ class ChatProvider extends ChangeNotifier {
     // The expected format is:
     // German sentence on first line
     // English translation on second line, optionally in parentheses.
-    final lines =
-        trimmed.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    final lines = trimmed
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
     String german = '';
     String english = '';
     if (lines.isNotEmpty) {
@@ -166,7 +177,11 @@ class ChatProvider extends ChangeNotifier {
 
     if (german.isEmpty && english.isEmpty) return null;
 
-    return ChatEntry(text: german.isEmpty ? english : german, translated: english, isUser: false);
+    return ChatEntry(
+      text: german.isEmpty ? english : german,
+      translated: english,
+      isUser: false,
+    );
   }
 
   bool _wantsStructuredOutput(String userText) {
@@ -213,8 +228,14 @@ class ChatProvider extends ChangeNotifier {
       }
     }
 
-    final hasUnorderedList = RegExp(r'^\s*[-*+]\s+.+$', multiLine: true).hasMatch(text);
-    final hasOrderedList = RegExp(r'^\s*\d+[.)]\s+.+$', multiLine: true).hasMatch(text);
+    final hasUnorderedList = RegExp(
+      r'^\s*[-*+]\s+.+$',
+      multiLine: true,
+    ).hasMatch(text);
+    final hasOrderedList = RegExp(
+      r'^\s*\d+[.)]\s+.+$',
+      multiLine: true,
+    ).hasMatch(text);
 
     return hasUnorderedList || hasOrderedList;
   }
@@ -290,9 +311,130 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> startBuddyVoiceTurn() async {
+    if (_isBuddyVoiceActive) return;
+    if (_isBuddyVoiceStopping) {
+      debugPrint('[BuddyLive] start ignored while stop is in progress.');
+      return;
+    }
+
+    await prepareBuddyLiveSession();
+    if (!_isBuddyLiveReady) {
+      addMessage(
+        ChatEntry(
+          text: _buddyLiveError ?? 'Buddy live session is unavailable.',
+          isUser: false,
+        ),
+      );
+      return;
+    }
+
+    final hasPermission = await _buddyAudioRecorder.hasPermission();
+    if (!hasPermission) {
+      addMessage(
+        ChatEntry(
+          text: 'Microphone permission is required for voice chat.',
+          isUser: false,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final inputStream = await _buddyAudioRecorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: 24000,
+          numChannels: 1,
+          echoCancel: true,
+          noiseSuppress: true,
+          androidConfig: AndroidRecordConfig(
+            audioSource: AndroidAudioSource.voiceCommunication,
+          ),
+        ),
+      );
+      await _service.startBuddyLiveAudioTurn(inputStream, sampleRateHz: 24000);
+      _buddyVoiceTranscript = '';
+      _isBuddyVoiceActive = true;
+      debugPrint('[BuddyLive] mic recording started (24kHz mono pcm16).');
+      notifyListeners();
+    } catch (e) {
+      _isBuddyVoiceActive = false;
+      debugPrint('[BuddyLive] start voice turn failed: $e');
+      addMessage(ChatEntry(text: 'Fehler: $e', isUser: false));
+      notifyListeners();
+    }
+  }
+
+  Future<void> stopBuddyVoiceTurn() async {
+    if (!_isBuddyVoiceActive) return;
+    if (_isBuddyVoiceStopping) {
+      debugPrint('[BuddyLive] duplicate stop ignored.');
+      return;
+    }
+    _isBuddyVoiceStopping = true;
+
+    try {
+      await _buddyAudioRecorder.stop();
+      debugPrint('[BuddyLive] mic recording stopped; waiting for model turn.');
+      final reply = await _service.finishBuddyLiveAudioTurn();
+      debugPrint(
+        '[BuddyLive] provider received reply '
+        'textLen=${reply.text.length} '
+        'audioBytes=${reply.audioBytes?.length ?? 0} '
+        'inputTxLen=${reply.inputTranscription?.length ?? 0} '
+        'outputTxLen=${reply.outputTranscription?.length ?? 0} '
+        'lastError=${_service.buddyLiveLastError ?? 'none'}',
+      );
+
+      final heard = (reply.inputTranscription ?? '').trim();
+      if (heard.isNotEmpty) {
+        addMessage(ChatEntry(text: heard, isUser: true));
+      }
+
+      final responseText = reply.text.trim();
+      if (responseText.isNotEmpty) {
+        addMessage(_parseReply(responseText));
+      }
+
+      if (responseText.isEmpty &&
+          (reply.audioBytes == null || reply.audioBytes!.isEmpty) &&
+          (reply.outputTranscription ?? '').trim().isEmpty) {
+        final reason =
+            _service.buddyLiveLastError ??
+            'No audio or transcription returned from Buddy.';
+        addMessage(ChatEntry(text: 'Fehler: $reason', isUser: false));
+      }
+
+      _buddyVoiceTranscript = heard;
+
+      if (reply.audioBytes != null && reply.audioBytes!.isNotEmpty) {
+        _latestAiAudioBytes = reply.audioBytes;
+        _latestAiAudioMimeType = reply.audioMimeType;
+        _latestAiAudioToken += 1;
+      }
+    } catch (e) {
+      debugPrint('[BuddyLive] stop voice turn failed: $e');
+      addMessage(ChatEntry(text: 'Fehler: $e', isUser: false));
+    } finally {
+      _isBuddyVoiceActive = false;
+      _isBuddyVoiceStopping = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> cancelBuddyVoiceTurn() async {
+    if (!_isBuddyVoiceActive) return;
+    await _buddyAudioRecorder.stop();
+    await _service.cancelBuddyLiveAudioTurn();
+    _isBuddyVoiceActive = false;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _buddyInterruptSub?.cancel();
+    _buddyAudioRecorder.dispose();
     _service.disposeBuddyLive();
     super.dispose();
   }

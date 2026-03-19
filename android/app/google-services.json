@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "381763033963-op94tgg8k2okd62ios1nsgbe7umibo0a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.wunderbarai",
+            "certificate_hash": "0b36ea4d8da13c0e3f678587c3409c2cea2f6575"
+          }
+        },
+        {
           "client_id": "381763033963-8afglse7nad3077tjse2sd6ecr7lqnqu.apps.googleusercontent.com",
           "client_type": 3
         }

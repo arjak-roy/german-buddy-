@@ -3,9 +3,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
+import 'package:firebase_ai/firebase_ai.dart';
+import 'package:flutter/foundation.dart';
 
-import '../../core/constants/app_keys.dart';
 import '../models/bread_shop_transaction.dart';
 import '../models/pronunciation_analysis_report.dart';
 
@@ -47,104 +47,42 @@ class BuddyDialogResponse {
   final String text;
   final Uint8List? audioBytes;
   final String? audioMimeType;
+  final String? inputTranscription;
+  final String? outputTranscription;
 
   const BuddyDialogResponse({
     required this.text,
     this.audioBytes,
     this.audioMimeType,
+    this.inputTranscription,
+    this.outputTranscription,
   });
 }
 
 class GeminiService {
-  static const _model =
-      'gemini-3.1-flash-lite-preview'; // Note: check current available models
-  static const _buddyModel = 'gemini-2.5-flash-preview-native-audio-dialog';
-  static const _buddyLiveModel = 'gemini-2.5-flash-native-audio-preview-12-2025';
-  static const _audioModel = 'gemini-3-flash-preview';
-  static const _baseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models';
-  static const _baseLiveWsUrl =
-    'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+  static const _model = 'gemini-2.5-flash-lite';
+  static const _buddyModel = 'gemini-2.5-flash';
+  static const _buddyLiveModel =
+      'gemini-2.5-flash-native-audio-preview-12-2025';
+  static const _audioModel = 'gemini-2.5-flash';
   static const _ticTacToeToolName = 'resolve_tic_tac_toe_turn';
 
-  String get _endpoint =>
-    '$_baseUrl/$_model:generateContent?key=${AppKeys.geminiApiKey}';
-  String get _buddyEndpoint =>
-    '$_baseUrl/$_buddyModel:generateContent?key=${AppKeys.geminiApiKey}';
-  String get _audioEndpoint =>
-    '$_baseUrl/$_audioModel:generateContent?key=${AppKeys.geminiApiKey}';
-  String get _buddyLiveEndpoint =>
-      '$_baseLiveWsUrl?key=${AppKeys.geminiApiKey}';
+  FirebaseAI get _ai => FirebaseAI.googleAI();
 
-  WebSocket? _buddyLiveSocket;
-  StreamSubscription<dynamic>? _buddyLiveSocketSub;
-  Completer<void>? _buddyLiveSetupCompleter;
-  Completer<BuddyDialogResponse>? _buddyLivePending;
+  LiveSession? _buddyLiveSession;
+  StreamSubscription<Uint8List>? _buddyLiveAudioInputSub;
+  bool _buddyLiveTurnInProgress = false;
   bool _buddyLiveReady = false;
   String? _buddyLiveLastError;
-  BytesBuilder? _buddyLiveAudioBuilder;
-  StringBuffer? _buddyLiveTextBuffer;
+  int _buddyLiveSentAudioBytes = 0;
+  int _buddyLiveSentAudioPackets = 0;
   final StreamController<void> _buddyLiveInterruptedController =
       StreamController<void>.broadcast();
 
   Stream<void> get buddyLiveInterruptedStream =>
       _buddyLiveInterruptedController.stream;
-  bool get isBuddyLiveConnected => _buddyLiveSocket != null && _buddyLiveReady;
+  bool get isBuddyLiveConnected => _buddyLiveSession != null && _buddyLiveReady;
   String? get buddyLiveLastError => _buddyLiveLastError;
-
-  static const List<Map<String, dynamic>> _buddyLiveToolDeclarations = [
-    {
-      'name': 'manage_todo_list',
-      'description':
-          'Create, update, complete, and reprioritize to-do items for the learner.',
-      'parameters': {
-        'type': 'OBJECT',
-        'properties': {
-          'action': {
-            'type': 'STRING',
-            'enum': ['create', 'update', 'complete', 'delete', 'list'],
-          },
-          'title': {'type': 'STRING'},
-          'itemId': {'type': 'STRING'},
-          'priority': {
-            'type': 'STRING',
-            'enum': ['low', 'medium', 'high'],
-          },
-          'notes': {'type': 'STRING'},
-        },
-        'required': ['action'],
-      },
-    },
-    {
-      'name': 'manage_recruitment_pipeline',
-      'description':
-          'Track candidates, interview status, feedback, and hiring decisions.',
-      'parameters': {
-        'type': 'OBJECT',
-        'properties': {
-          'action': {
-            'type': 'STRING',
-            'enum': [
-              'add_candidate',
-              'update_stage',
-              'add_feedback',
-              'schedule_interview',
-              'make_decision'
-            ],
-          },
-          'candidateName': {'type': 'STRING'},
-          'role': {'type': 'STRING'},
-          'stage': {'type': 'STRING'},
-          'feedback': {'type': 'STRING'},
-          'decision': {
-            'type': 'STRING',
-            'enum': ['hire', 'hold', 'reject'],
-          },
-        },
-        'required': ['action'],
-      },
-    },
-  ];
 
   static const String _ticTacToeSystemPrompt =
       'You are Wunderbar TicTacToe, a bilingual (German/English) game host and opponent. '
@@ -303,34 +241,22 @@ class GeminiService {
     final prompt = (systemPrompt != null && systemPrompt.isNotEmpty)
         ? systemPrompt
         : _buddySystemPrompt;
-    // 1. Correct Payload Structure
-    final payload = {
-      'contents': [
-        {
-          'role': 'user', // Required
-          'parts': [
-            {
-              'text': userMessage,
-            }, // System prompt is better handled in systemInstruction
-          ],
-        },
-      ],
-      'systemInstruction': {
-        'parts': [
-          {'text': prompt},
-        ],
-      },
-      'generationConfig': {
-        'temperature': 0.1,
-        'maxOutputTokens': 2048,
-        if (forceJsonResponse) 'responseMimeType': 'application/json',
-      },
-    };
 
     try {
-      final data = await _postPayload(payload);
-      final text = _extractFirstText(data);
-      return text ?? 'Unexpected response format';
+      final model = _ai.generativeModel(
+        model: _model,
+        systemInstruction: Content.system(prompt),
+        generationConfig: GenerationConfig(
+          temperature: 0.1,
+          maxOutputTokens: 2048,
+          responseMimeType: forceJsonResponse ? 'application/json' : null,
+        ),
+      );
+      final response = await model.generateContent([Content.text(userMessage)]);
+      final text = response.text;
+      return (text == null || text.trim().isEmpty)
+          ? 'Unexpected response format'
+          : text;
     } catch (e) {
       return 'Error: $e';
     }
@@ -344,48 +270,40 @@ class GeminiService {
         ? systemPrompt
         : _buddySystemPrompt;
 
-    final payload = {
-      'contents': [
-        {
-          'role': 'user',
-          'parts': [
-            {'text': userMessage},
-          ],
-        },
-      ],
-      'systemInstruction': {
-        'parts': [
-          {'text': prompt},
-        ],
-      },
-      'generationConfig': {
-        'temperature': 0.2,
-        'maxOutputTokens': 500,
-        'responseModalities': ['TEXT', 'AUDIO'],
-        'speechConfig': {
-          'voiceConfig': {
-            'prebuiltVoiceConfig': {'voiceName': 'Aoede'}
-          }
-        },
-      },
-    };
-
     try {
-      final data = await _postPayload(payload, endpoint: _buddyEndpoint);
-      final text = _extractFirstText(data);
-      final audio = _extractFirstInlineAudio(data);
+      final model = _ai.generativeModel(
+        model: _buddyModel,
+        systemInstruction: Content.system(prompt),
+        generationConfig: GenerationConfig(
+          temperature: 0.2,
+          maxOutputTokens: 500,
+          responseModalities: const [
+            ResponseModalities.text,
+            ResponseModalities.audio,
+          ],
+        ),
+      );
+
+      final response = await model.generateContent([Content.text(userMessage)]);
+      final text = response.text;
+      final audioPart = response.inlineDataParts
+          .where((p) {
+            return p.mimeType.startsWith('audio/');
+          })
+          .cast<InlineDataPart?>()
+          .firstWhere((p) => p != null, orElse: () => null);
 
       if (text != null && text.trim().isNotEmpty) {
         return BuddyDialogResponse(
           text: text,
-          audioBytes: audio?.bytes,
-          audioMimeType: audio?.mimeType,
+          audioBytes: audioPart?.bytes,
+          audioMimeType: audioPart?.mimeType,
         );
       }
       return BuddyDialogResponse(
         text: 'Unexpected response format',
-        audioBytes: audio?.bytes,
-        audioMimeType: audio?.mimeType,
+        audioBytes: audioPart?.bytes,
+        audioMimeType: audioPart?.mimeType,
       );
     } catch (_) {
       // If the native-audio-dialog model/region is unavailable, fall back to the
@@ -403,97 +321,40 @@ class GeminiService {
         ? systemPrompt
         : _buddySystemPrompt;
 
-    late final WebSocket socket;
+    final liveModel = _ai.liveGenerativeModel(
+      model: _buddyLiveModel,
+      systemInstruction: Content.system(prompt),
+      liveGenerationConfig: LiveGenerationConfig(
+        responseModalities: const [ResponseModalities.audio],
+        speechConfig: SpeechConfig(voiceName: 'Aoede'),
+        inputAudioTranscription: AudioTranscriptionConfig(),
+        outputAudioTranscription: AudioTranscriptionConfig(),
+        temperature: 0.2,
+        maxOutputTokens: 500,
+      ),
+    );
+
     try {
-      socket = await WebSocket.connect(
-        _buddyLiveEndpoint,
-        compression: CompressionOptions.compressionOff,
-      );
+      _buddyLiveSession = await liveModel.connect();
+      _buddyLiveLastError = null;
+      _buddyLiveReady = true;
     } catch (e) {
-      _buddyLiveLastError = 'Buddy live websocket connect failed: $e';
+      _buddyLiveLastError = 'Buddy live connect failed: $e';
+      _buddyLiveSession = null;
+      _buddyLiveReady = false;
       rethrow;
     }
-
-    _buddyLiveSocket = socket;
-    _buddyLiveReady = false;
-    _buddyLiveLastError = null;
-    _buddyLiveSetupCompleter = Completer<void>();
-
-    _buddyLiveSocketSub = socket.listen(
-      _handleBuddyLiveMessage,
-      onError: (_) {
-        _buddyLiveLastError = 'Buddy live socket error';
-        if (_buddyLiveSetupCompleter != null &&
-            !_buddyLiveSetupCompleter!.isCompleted) {
-          _buddyLiveSetupCompleter!
-              .completeError(StateError(_buddyLiveLastError!));
-        }
-        _completeBuddyLivePendingWithFallback();
-      },
-      onDone: () {
-        final code = socket.closeCode;
-        final reason = socket.closeReason;
-        _buddyLiveLastError =
-            'Buddy live socket closed (code: ${code ?? 'n/a'}, reason: ${reason ?? 'n/a'})';
-        if (_buddyLiveSetupCompleter != null &&
-            !_buddyLiveSetupCompleter!.isCompleted) {
-          _buddyLiveSetupCompleter!
-              .completeError(StateError(_buddyLiveLastError!));
-        }
-        _buddyLiveReady = false;
-        _completeBuddyLivePendingWithFallback();
-      },
-      cancelOnError: false,
-    );
-
-    final setup = {
-      'config': {
-        'model': 'models/$_buddyLiveModel',
-        'responseModalities': ['TEXT', 'AUDIO'],
-        'speechConfig': {
-          'voiceConfig': {
-            'prebuiltVoiceConfig': {'voiceName': 'Aoede'},
-          },
-        },
-        'systemInstruction': {
-          'parts': [
-            {'text': prompt},
-          ],
-        },
-        'outputAudioTranscription': {},
-        'tools': [
-          {
-            'functionDeclarations': _buddyLiveToolDeclarations,
-          },
-        ],
-      },
-    };
-
-    socket.add(jsonEncode(setup));
-
-    await _buddyLiveSetupCompleter!.future.timeout(
-      const Duration(seconds: 12),
-      onTimeout: () {
-        _buddyLiveLastError = 'Buddy live setup timeout';
-        throw StateError(_buddyLiveLastError!);
-      },
-    );
-
-    _buddyLiveReady = true;
   }
 
   Future<void> closeBuddyLiveSession() async {
+    await _buddyLiveAudioInputSub?.cancel();
+    _buddyLiveAudioInputSub = null;
+
     _buddyLiveReady = false;
-    _buddyLiveSetupCompleter = null;
-    _buddyLivePending = null;
-    _buddyLiveAudioBuilder = null;
-    _buddyLiveTextBuffer = null;
+    _buddyLiveTurnInProgress = false;
 
-    await _buddyLiveSocketSub?.cancel();
-    _buddyLiveSocketSub = null;
-
-    await _buddyLiveSocket?.close();
-    _buddyLiveSocket = null;
+    await _buddyLiveSession?.close();
+    _buddyLiveSession = null;
   }
 
   Future<BuddyDialogResponse> askBuddyLive(
@@ -503,46 +364,176 @@ class GeminiService {
     try {
       await startBuddyLiveSession(systemPrompt);
 
-      final socket = _buddyLiveSocket;
-      if (socket == null || !_buddyLiveReady) {
+      final session = _buddyLiveSession;
+      if (session == null || !_buddyLiveReady) {
         return askBuddy(userMessage, systemPrompt);
       }
 
-      if (_buddyLivePending != null && !_buddyLivePending!.isCompleted) {
+      if (_buddyLiveTurnInProgress) {
         return askBuddy(userMessage, systemPrompt);
       }
 
-      _buddyLiveAudioBuilder = BytesBuilder(copy: false);
-      _buddyLiveTextBuffer = StringBuffer();
-      final pending = Completer<BuddyDialogResponse>();
-      _buddyLivePending = pending;
-
-      final payload = {
-        'clientContent': {
-          'turns': [
-            {
-              'role': 'user',
-              'parts': [
-                {'text': userMessage},
-              ],
-            },
-          ],
-          'turnComplete': true,
-        },
-      };
-
-      socket.add(jsonEncode(payload));
-
-      return pending.future.timeout(
-        const Duration(seconds: 35),
-        onTimeout: () {
-          _completeBuddyLivePendingWithFallback();
-          return const BuddyDialogResponse(text: 'Unexpected response format');
-        },
-      );
-    } catch (_) {
+      _buddyLiveTurnInProgress = true;
+      try {
+        await session.sendTextRealtime(userMessage);
+        await session.send(turnComplete: true);
+        return await _collectBuddyLiveTurnResponse(session).timeout(
+          const Duration(seconds: 35),
+          onTimeout: () {
+            _buddyLiveLastError = 'Buddy live text turn timed out.';
+            return const BuddyDialogResponse(
+              text: 'Unexpected response format',
+            );
+          },
+        );
+      } finally {
+        _buddyLiveTurnInProgress = false;
+      }
+    } catch (e) {
+      _buddyLiveLastError = 'Buddy live text turn failed: $e';
+      await closeBuddyLiveSession();
       return askBuddy(userMessage, systemPrompt);
     }
+  }
+
+  Future<void> startBuddyLiveAudioTurn(
+    Stream<Uint8List> audioStream, {
+    int sampleRateHz = 16000,
+    String? systemPrompt,
+  }) async {
+    await startBuddyLiveSession(systemPrompt);
+
+    final session = _buddyLiveSession;
+    if (session == null || !_buddyLiveReady) {
+      throw StateError('Buddy live session is not ready.');
+    }
+    if (_buddyLiveTurnInProgress) {
+      throw StateError('Buddy live turn already in progress.');
+    }
+
+    _buddyLiveTurnInProgress = true;
+    _buddyLiveSentAudioBytes = 0;
+    _buddyLiveSentAudioPackets = 0;
+    debugPrint(
+      '[BuddyLive] start audio turn sampleRateHz=$sampleRateHz ready=$_buddyLiveReady',
+    );
+    var isFirstChunk = true;
+    await _buddyLiveAudioInputSub?.cancel();
+    _buddyLiveAudioInputSub = audioStream.listen(
+      (chunk) {
+        if (chunk.isEmpty) return;
+
+        final prepared = _prepareLivePcmChunk(
+          chunk,
+          sampleRateHz: sampleRateHz,
+          isFirstChunk: isFirstChunk,
+        );
+        isFirstChunk = false;
+        if (prepared == null || prepared.isEmpty) return;
+
+        // Forward each recorder chunk directly (same pattern as Firebase sample).
+        _buddyLiveSentAudioPackets += 1;
+        _buddyLiveSentAudioBytes += prepared.length;
+        unawaited(
+          session
+              .sendAudioRealtime(InlineDataPart('audio/pcm', prepared))
+              .catchError((error) {
+                _buddyLiveLastError =
+                    'Buddy live audio chunk send failed (sampleRateHz=$sampleRateHz): $error';
+                _buddyLiveReady = false;
+                debugPrint('[BuddyLive] $_buddyLiveLastError');
+              }),
+        );
+      },
+      onError: (error) {
+        _buddyLiveLastError = 'Buddy live audio stream failed: $error';
+        _buddyLiveReady = false;
+        debugPrint('[BuddyLive] $_buddyLiveLastError');
+      },
+      cancelOnError: false,
+    );
+  }
+
+  Future<BuddyDialogResponse> finishBuddyLiveAudioTurn() async {
+    final session = _buddyLiveSession;
+    if (!_buddyLiveTurnInProgress || session == null) {
+      _buddyLiveLastError =
+          'Buddy live audio turn finished without an active session.';
+      return const BuddyDialogResponse(text: '');
+    }
+
+    try {
+      await _buddyLiveAudioInputSub?.cancel();
+      _buddyLiveAudioInputSub = null;
+
+      await session.send(turnComplete: true);
+      var reply = await _collectBuddyLiveTurnResponse(session).timeout(
+        const Duration(seconds: 45),
+        onTimeout: () {
+          _buddyLiveLastError = 'Buddy live audio turn timed out.';
+          return const BuddyDialogResponse(text: '');
+        },
+      );
+
+      final isEmptyTurn =
+          reply.text.trim().isEmpty &&
+          (reply.audioBytes == null || reply.audioBytes!.isEmpty) &&
+          (reply.inputTranscription ?? '').trim().isEmpty &&
+          (reply.outputTranscription ?? '').trim().isEmpty;
+      if (isEmptyTurn && _buddyLiveSentAudioBytes > 0) {
+        debugPrint(
+          '[BuddyLive] empty audio turn; sending one-shot text nudge fallback.',
+        );
+        await session.sendTextRealtime(
+          'Please reply now with one short German sentence and one short English translation.',
+        );
+        await session.send(turnComplete: true);
+        final nudgedReply = await _collectBuddyLiveTurnResponse(session).timeout(
+          const Duration(seconds: 20),
+          onTimeout: () {
+            _buddyLiveLastError =
+                'Buddy live nudge fallback timed out after empty audio turn.';
+            return const BuddyDialogResponse(text: '');
+          },
+        );
+        final nudgedHasContent =
+            nudgedReply.text.trim().isNotEmpty ||
+            (nudgedReply.audioBytes != null && nudgedReply.audioBytes!.isNotEmpty) ||
+            (nudgedReply.outputTranscription ?? '').trim().isNotEmpty;
+        if (nudgedHasContent) {
+          _buddyLiveLastError = null;
+          reply = nudgedReply;
+        }
+      } else if (isEmptyTurn && _buddyLiveSentAudioBytes == 0) {
+        _buddyLiveLastError =
+            'No microphone audio bytes were sent during the live turn.';
+      }
+
+      debugPrint(
+        '[BuddyLive] finish audio turn '
+        'sentPackets=$_buddyLiveSentAudioPackets '
+        'sentBytes=$_buddyLiveSentAudioBytes '
+        'textLen=${reply.text.length} '
+        'audioBytes=${reply.audioBytes?.length ?? 0} '
+        'inputTxLen=${reply.inputTranscription?.length ?? 0} '
+        'outputTxLen=${reply.outputTranscription?.length ?? 0} '
+        'lastError=${_buddyLiveLastError ?? 'none'}',
+      );
+      return reply;
+    } catch (e) {
+      _buddyLiveLastError = 'Buddy live audio turn failed: $e';
+      debugPrint('[BuddyLive] $_buddyLiveLastError');
+      await closeBuddyLiveSession();
+      rethrow;
+    } finally {
+      _buddyLiveTurnInProgress = false;
+    }
+  }
+
+  Future<void> cancelBuddyLiveAudioTurn() async {
+    await _buddyLiveAudioInputSub?.cancel();
+    _buddyLiveAudioInputSub = null;
+    _buddyLiveTurnInProgress = false;
   }
 
   Future<TicTacToeTurnPlan> planTicTacToeTurn({
@@ -552,80 +543,61 @@ class GeminiService {
     required String? winner,
     required bool isGerman,
   }) async {
-    final payload = {
-      'systemInstruction': {
-        'parts': [
-          {'text': _ticTacToeSystemPrompt},
-        ],
-      },
-      'contents': [
-        {
-          'role': 'user',
-          'parts': [
-            {
-              'text': jsonEncode({
-                'userUtterance': userUtterance,
-                'board': board,
-                'isGameOver': isGameOver,
-                'winner': winner,
-                'isGerman': isGerman,
-              }),
+    final model = _ai.generativeModel(
+      model: _model,
+      systemInstruction: Content.system(_ticTacToeSystemPrompt),
+      tools: [
+        Tool.functionDeclarations([
+          FunctionDeclaration(
+            _ticTacToeToolName,
+            'Resolve the user turn intent and provide legal Tic-Tac-Toe moves plus a spoken response.',
+            parameters: {
+              'action': Schema.enumString(
+                enumValues: ['player_move', 'reset_game', 'help', 'invalid'],
+              ),
+              'playerMoveIndex': Schema.integer(
+                description:
+                    'Index 0..8 for player X move. Required when action is player_move.',
+              ),
+              'assistantMoveIndex': Schema.integer(
+                description:
+                    'Index 0..8 for assistant O move. Required for player_move unless game ends after player move.',
+              ),
+              'spokenResponse': Schema.string(
+                description:
+                    'Short conversational line for the app to speak to the user.',
+              ),
+              'englishTranslation': Schema.string(
+                description:
+                    'English translation of spokenResponse. If spokenResponse is already English, repeat it.',
+              ),
             },
-          ],
-        },
+            optionalParameters: const ['playerMoveIndex', 'assistantMoveIndex'],
+          ),
+        ]),
       ],
-      'tools': [
-        {
-          'functionDeclarations': [
-            {
-              'name': _ticTacToeToolName,
-              'description':
-                  'Resolve the user turn intent and provide legal Tic-Tac-Toe moves plus a spoken response.',
-              'parameters': {
-                'type': 'OBJECT',
-                'properties': {
-                  'action': {
-                    'type': 'STRING',
-                    'enum': ['player_move', 'reset_game', 'help', 'invalid'],
-                  },
-                  'playerMoveIndex': {
-                    'type': 'INTEGER',
-                    'description':
-                        'Index 0..8 for player X move. Required when action is player_move.',
-                  },
-                  'assistantMoveIndex': {
-                    'type': 'INTEGER',
-                    'description':
-                        'Index 0..8 for assistant O move. Required for player_move unless game ends after player move.',
-                  },
-                  'spokenResponse': {
-                    'type': 'STRING',
-                    'description':
-                        'Short conversational line for the app to speak to the user.',
-                  },
-                  'englishTranslation': {
-                    'type': 'STRING',
-                    'description':
-                        'English translation of spokenResponse. If spokenResponse is already English, repeat it.',
-                  },
-                },
-                'required': ['action', 'spokenResponse', 'englishTranslation'],
-              },
-            },
-          ],
-        },
-      ],
-      'toolConfig': {
-        'functionCallingConfig': {
-          'mode': 'ANY',
-          'allowedFunctionNames': [_ticTacToeToolName],
-        },
-      },
-      'generationConfig': {'temperature': 0.35, 'maxOutputTokens': 300},
-    };
+      toolConfig: ToolConfig(
+        functionCallingConfig: FunctionCallingConfig.any({_ticTacToeToolName}),
+      ),
+      generationConfig: GenerationConfig(
+        temperature: 0.35,
+        maxOutputTokens: 300,
+      ),
+    );
 
-    final data = await _postPayload(payload);
-    final functionArgs = _extractFunctionArgs(data, _ticTacToeToolName);
+    final promptJson = jsonEncode({
+      'userUtterance': userUtterance,
+      'board': board,
+      'isGameOver': isGameOver,
+      'winner': winner,
+      'isGerman': isGerman,
+    });
+
+    final response = await model.generateContent([Content.text(promptJson)]);
+    final functionArgs = _extractFunctionArgsFromResponse(
+      response,
+      _ticTacToeToolName,
+    );
     if (functionArgs == null) {
       throw Exception('Gemini did not return $_ticTacToeToolName.');
     }
@@ -666,104 +638,53 @@ class GeminiService {
         '- Schwa insertion in unstressed syllables\n\n'
         'OUTPUT: Respond with ONLY a valid JSON object matching the specified schema.';
 
-    final payload = {
-      'systemInstruction': {
-        'parts': [
-          {'text': _pronunciationSystemPrompt},
-        ],
-      },
-      'contents': [
-        {
-          'role': 'user',
-          'parts': [
-            {
-              'inlineData': {
-                'mimeType': _audioMimeTypeForPath(audioFilePath),
-                'data': base64Encode(audioBytes),
-              },
-            },
-            {'text': prompt},
-          ],
-        },
-      ],
-      'generationConfig': {
-        'responseMimeType': 'application/json',
-        'responseSchema': {
-          'type': 'OBJECT',
-          'properties': {
-            'overallScore': {
-              'type': 'INTEGER',
-              'description': 'Score from 0-100',
-            },
-            'heardText': {
-              'type': 'STRING',
-              'description': 'The literal transcription of what was heard',
-            },
-            'phonemeBreakdown': {
-              'type': 'ARRAY',
-              'items': {
-                'type': 'OBJECT',
-                'properties': {
-                  'phoneme': {
-                    'type': 'STRING',
-                    'description': 'IPA symbol',
-                  },
-                  'status': {
-                    'type': 'STRING',
-                    'enum': ['correct', 'incorrect', 'partial'],
-                    'description': 'Whether the phoneme was pronounced correctly',
-                  },
-                  'observed': {
-                    'type': 'STRING',
-                    'description': 'What sound was actually made',
-                  },
-                  'lipShape': {
-                    'type': 'STRING',
-                    'description': 'Specific physical cue for mouth positioning',
-                  },
-                  'tip': {
-                    'type': 'STRING',
-                    'description': 'Short friendly advice',
-                  },
+    final model = _ai.generativeModel(
+      model: _audioModel,
+      systemInstruction: Content.system(_pronunciationSystemPrompt),
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+        responseSchema: Schema.object(
+          properties: {
+            'overallScore': Schema.integer(description: 'Score from 0-100'),
+            'heardText': Schema.string(
+              description: 'The literal transcription of what was heard',
+            ),
+            'phonemeBreakdown': Schema.array(
+              items: Schema.object(
+                properties: {
+                  'phoneme': Schema.string(description: 'IPA symbol'),
+                  'status': Schema.enumString(
+                    enumValues: ['correct', 'incorrect', 'partial'],
+                    description: 'Whether the phoneme was pronounced correctly',
+                  ),
+                  'observed': Schema.string(
+                    description: 'What sound was actually made',
+                  ),
+                  'lipShape': Schema.string(
+                    description: 'Specific physical cue for mouth positioning',
+                  ),
+                  'tip': Schema.string(description: 'Short friendly advice'),
                 },
-                'required': [
-                  'phoneme',
-                  'status',
-                  'observed',
-                  'lipShape',
-                  'tip',
-                ],
-              },
-            },
-            'strengths': {
-              'type': 'ARRAY',
-              'items': {'type': 'STRING'},
-              'description': 'List of things the learner did well (2-3 items)',
-            },
-            'priorities': {
-              'type': 'ARRAY',
-              'items': {'type': 'STRING'},
-              'description': 'List of top areas needing work (1-3 items, ranked by importance)',
-            },
-            'nextTryInstruction': {
-              'type': 'STRING',
-              'description': 'One sentence for the user to improve',
-            },
+              ),
+            ),
+            'strengths': Schema.array(items: Schema.string()),
+            'priorities': Schema.array(items: Schema.string()),
+            'nextTryInstruction': Schema.string(
+              description: 'One sentence for the user to improve',
+            ),
           },
-          'required': [
-            'overallScore',
-            'heardText',
-            'strengths',
-            'priorities',
-            'phonemeBreakdown',
-            'nextTryInstruction',
-          ],
-        },
-      },
-    };
+        ),
+      ),
+    );
 
-    final data = await _postPayload(payload, endpoint: _audioEndpoint);
-    final text = _extractFirstText(data);
+    final response = await model.generateContent([
+      Content.multi([
+        InlineDataPart(_audioMimeTypeForPath(audioFilePath), audioBytes),
+        TextPart(prompt),
+      ]),
+    ]);
+
+    final text = response.text;
     if (text == null || text.trim().isEmpty) {
       throw Exception('Gemini did not return a pronunciation analysis.');
     }
@@ -776,23 +697,6 @@ class GeminiService {
     }
 
     return PronunciationAnalysisReport.fromMap(decoded);
-  }
-
-  Future<Map<String, dynamic>> _postPayload(
-    Map<String, dynamic> payload, {
-    String? endpoint,
-  }) async {
-    final response = await http.post(
-      Uri.parse(endpoint ?? _endpoint),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 30));
-
-    if (response.statusCode != 200) {
-      throw Exception('Gemini request failed: ${response.body}');
-    }
-
-    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   String _audioMimeTypeForPath(String path) {
@@ -813,118 +717,59 @@ class GeminiService {
     required bool isGerman,
     required List<Map<String, dynamic>> conversationHistory,
   }) async {
-    final payload = {
-      'systemInstruction': {
-        'parts': [
-          {'text': _breadShopSystemPrompt},
-        ],
-      },
-      'contents': [
-        {
-          'role': 'user',
-          'parts': [
-            {
-              'text': jsonEncode({
-                'conversationHistory': conversationHistory,
-                'userUtterance': userUtterance,
-                'currentBudget': currentBudgetEur,
-                'purchasedItems': purchasedItems,
-                'cartTotal': currentCartTotalEur,
-                'isGerman': isGerman,
-              }),
-            },
-          ],
-        },
-      ],
-      'tools': [
-        {
-          'functionDeclarations': [
-            {
-              'name': 'negotiate_bread_shop',
-              'description':
-                  'Handle bakery negotiation with strict budget checks. Compute Remaining_Balance = currentBudget - cartTotal, enforce minimum price (90% of standard), suggest affordable items with offer_item, use counter_offer only for discount requests, reject unaffordable or below-floor offers, and keep German response plus English translation.',
-              'parameters': {
-                'type': 'OBJECT',
-                'properties': {
-                  'action': {
-                    'type': 'STRING',
-                    'enum': [
-                      'offer_item',
-                      'counter_offer',
-                      'accept',
-                      'reject',
-                      'complete_sale'
-                    ],
-                    'description':
-                        'offer_item for offers/suggestions; counter_offer only when user asks discount; reject for unaffordable requests or below 10% discount floor.',
-                  },
-                  'item': {
-                    'type': 'STRING',
-                    'description':
-                        'Item name from catalog. Use empty string only for complete_sale or generic reject.',
-                  },
-                  'itemPrice': {
-                    'type': 'NUMBER',
-                    'minimum': 0,
-                    'description':
-                        'Final negotiated unit price in EUR. Must never be below 90% of standard list price for that item.',
-                  },
-                  'quantity': {
-                    'type': 'INTEGER',
-                    'minimum': 1,
-                    'description':
-                        'Number of items in this turn. Use 1 if user did not specify.',
-                  },
-                  'totalPrice': {
-                    'type': 'NUMBER',
-                    'minimum': 0,
-                    'description':
-                        'Must equal itemPrice * quantity, and must be <= currentBudget and <= Remaining_Balance (currentBudget - cartTotal).',
-                  },
-                  'shopkeeperResponse': {
-                    'type': 'STRING',
-                    'description':
-                        'Response in German. For budget questions, include concrete affordable options.',
-                  },
-                  'englishTranslation': {
-                    'type': 'STRING',
-                    'description':
-                        'Accurate English translation of shopkeeperResponse.',
-                  },
-                  'dealAccepted': {
-                    'type': 'BOOLEAN',
-                    'description':
-                        'True only when an item deal is accepted or sale is completed; false for offer/counter_offer/reject.',
-                  },
-                },
-                'required': [
-                  'action',
-                  'item',
-                  'itemPrice',
-                  'quantity',
-                  'totalPrice',
-                  'shopkeeperResponse',
-                  'englishTranslation',
-                  'dealAccepted',
-                ],
-              },
-            },
-          ],
-        },
-      ],
-      'toolConfig': {
-        'functionCallingConfig': {
-          'mode': 'ANY',
-          'allowedFunctionNames': ['negotiate_bread_shop'],
-        },
-      },
-      'generationConfig': {'temperature': 0.5, 'maxOutputTokens': 350},
-    };
+    const functionName = 'negotiate_bread_shop';
 
-    final data = await _postPayload(payload);
+    final model = _ai.generativeModel(
+      model: _model,
+      systemInstruction: Content.system(_breadShopSystemPrompt),
+      tools: [
+        Tool.functionDeclarations([
+          FunctionDeclaration(
+            functionName,
+            'Handle bakery negotiation with strict budget checks. Compute Remaining_Balance = currentBudget - cartTotal, enforce minimum price (90% of standard), suggest affordable items with offer_item, use counter_offer only for discount requests, reject unaffordable or below-floor offers, and keep German response plus English translation.',
+            parameters: {
+              'action': Schema.enumString(
+                enumValues: [
+                  'offer_item',
+                  'counter_offer',
+                  'accept',
+                  'reject',
+                  'complete_sale',
+                ],
+              ),
+              'item': Schema.string(),
+              'itemPrice': Schema.number(minimum: 0),
+              'quantity': Schema.integer(minimum: 1),
+              'totalPrice': Schema.number(minimum: 0),
+              'shopkeeperResponse': Schema.string(),
+              'englishTranslation': Schema.string(),
+              'dealAccepted': Schema.boolean(),
+            },
+          ),
+        ]),
+      ],
+      toolConfig: ToolConfig(
+        functionCallingConfig: FunctionCallingConfig.any({functionName}),
+      ),
+      generationConfig: GenerationConfig(
+        temperature: 0.5,
+        maxOutputTokens: 350,
+      ),
+    );
+
+    final promptJson = jsonEncode({
+      'conversationHistory': conversationHistory,
+      'userUtterance': userUtterance,
+      'currentBudget': currentBudgetEur,
+      'purchasedItems': purchasedItems,
+      'cartTotal': currentCartTotalEur,
+      'isGerman': isGerman,
+    });
+
+    final response = await model.generateContent([Content.text(promptJson)]);
     final functionArgs =
-        _extractFunctionArgs(data, 'negotiate_bread_shop') ??
-        _extractBreadShopArgsFromText(data);
+        _extractFunctionArgsFromResponse(response, functionName) ??
+        _extractBreadShopArgsFromText(response.text);
     if (functionArgs == null) {
       throw Exception(
         'Baker did not return a valid negotiation response. Please try again.',
@@ -934,10 +779,7 @@ class GeminiService {
     return BreadShopNegotiation.fromFunctionArgs(functionArgs);
   }
 
-  Map<String, dynamic>? _extractBreadShopArgsFromText(
-    Map<String, dynamic> data,
-  ) {
-    final text = _extractFirstText(data);
+  Map<String, dynamic>? _extractBreadShopArgsFromText(String? text) {
     if (text == null || text.trim().isEmpty) return null;
 
     try {
@@ -964,206 +806,168 @@ class GeminiService {
     return null;
   }
 
-  String? _extractFirstText(Map<String, dynamic> data) {
-    final candidates = data['candidates'];
-    if (candidates is! List || candidates.isEmpty) return null;
-
-    final content = candidates.first['content'];
-    if (content is! Map<String, dynamic>) return null;
-
-    final parts = content['parts'];
-    if (parts is! List || parts.isEmpty) return null;
-
-    for (final part in parts) {
-      if (part is Map<String, dynamic> && part['text'] is String) {
-        return part['text'] as String;
-      }
-    }
-    return null;
-  }
-
-  ({Uint8List bytes, String mimeType})? _extractFirstInlineAudio(
-    Map<String, dynamic> data,
-  ) {
-    final candidates = data['candidates'];
-    if (candidates is! List || candidates.isEmpty) return null;
-
-    final content = candidates.first['content'];
-    if (content is! Map<String, dynamic>) return null;
-
-    final parts = content['parts'];
-    if (parts is! List || parts.isEmpty) return null;
-
-    for (final part in parts) {
-      if (part is! Map<String, dynamic>) continue;
-      final inlineData = part['inlineData'];
-      if (inlineData is! Map<String, dynamic>) continue;
-
-      final mimeType = (inlineData['mimeType'] ?? '').toString();
-      final dataB64 = (inlineData['data'] ?? '').toString();
-      if (!mimeType.startsWith('audio/') || dataB64.isEmpty) continue;
-
-      try {
-        final bytes = base64Decode(dataB64);
-        if (bytes.isNotEmpty) {
-          return (bytes: bytes, mimeType: mimeType);
-        }
-      } catch (_) {
-        // Ignore malformed inline audio and continue scanning parts.
-      }
-    }
-
-    return null;
-  }
-
-  Map<String, dynamic>? _extractFunctionArgs(
-    Map<String, dynamic> data,
+  Map<String, dynamic>? _extractFunctionArgsFromResponse(
+    GenerateContentResponse response,
     String functionName,
   ) {
-    final candidates = data['candidates'];
-    if (candidates is! List || candidates.isEmpty) return null;
-
-    final content = candidates.first['content'];
-    if (content is! Map<String, dynamic>) return null;
-
-    final parts = content['parts'];
-    if (parts is! List || parts.isEmpty) return null;
-
-    for (final part in parts) {
-      if (part is! Map<String, dynamic>) continue;
-      final functionCall = part['functionCall'];
-      if (functionCall is! Map<String, dynamic>) continue;
-      if (functionCall['name'] != functionName) continue;
-
-      final args = functionCall['args'];
-      if (args is Map<String, dynamic>) {
-        return args;
-      }
+    for (final call in response.functionCalls) {
+      if (call.name != functionName) continue;
+      final normalized = <String, dynamic>{};
+      call.args.forEach((key, value) {
+        normalized[key] = value;
+      });
+      return normalized;
     }
-
     return null;
   }
 
-  void _handleBuddyLiveMessage(dynamic raw) {
-    Map<String, dynamic>? msg;
-    try {
-      if (raw is String) {
-        final decoded = jsonDecode(raw);
-        if (decoded is Map<String, dynamic>) {
-          msg = decoded;
+  Future<BuddyDialogResponse> _collectBuddyLiveTurnResponse(
+    LiveSession session,
+  ) async {
+    final audioBuilder = BytesBuilder(copy: false);
+    final textBuffer = StringBuffer();
+    final inputTranscriptionBuffer = StringBuffer();
+    final outputTranscriptionBuffer = StringBuffer();
+
+    await for (final response in session.receive()) {
+      final message = response.message;
+
+      if (message is GoingAwayNotice) {
+        _buddyLiveLastError =
+            'Buddy live session is ending soon (timeLeft: ${message.timeLeft ?? 'n/a'}).';
+      }
+
+      if (message is! LiveServerContent) continue;
+
+      if (message.interrupted == true) {
+        _buddyLiveInterruptedController.add(null);
+      }
+
+      final inputText = (message.inputTranscription?.text ?? '').trim();
+      if (inputText.isNotEmpty) {
+        inputTranscriptionBuffer.write(inputText);
+      }
+
+      final outputText = (message.outputTranscription?.text ?? '').trim();
+      if (outputText.isNotEmpty) {
+        outputTranscriptionBuffer.write(outputText);
+      }
+
+      final modelTurn = message.modelTurn;
+      if (modelTurn == null) continue;
+
+      for (final part in modelTurn.parts) {
+        if (part is TextPart && part.text.trim().isNotEmpty) {
+          textBuffer.write(part.text);
+          continue;
         }
-      }
-    } catch (_) {
-      return;
-    }
 
-    if (msg == null) return;
-
-    if (msg['setupComplete'] != null) {
-      _buddyLiveReady = true;
-      _buddyLiveLastError = null;
-      if (_buddyLiveSetupCompleter != null &&
-          !_buddyLiveSetupCompleter!.isCompleted) {
-        _buddyLiveSetupCompleter!.complete();
-      }
-      return;
-    }
-
-    final serverContent = msg['serverContent'];
-    if (serverContent is! Map<String, dynamic>) {
-      final error = msg['error'];
-      if (error != null) {
-        _buddyLiveLastError = 'Buddy live server error: $error';
-        if (_buddyLiveSetupCompleter != null &&
-            !_buddyLiveSetupCompleter!.isCompleted) {
-          _buddyLiveSetupCompleter!
-              .completeError(StateError(_buddyLiveLastError!));
-        }
-        _completeBuddyLivePendingWithFallback();
-      }
-      return;
-    }
-
-    if (serverContent['interrupted'] == true) {
-      _buddyLiveInterruptedController.add(null);
-    }
-
-    final outputTranscription = serverContent['outputTranscription'];
-    if (outputTranscription is Map<String, dynamic>) {
-      final text = (outputTranscription['text'] ?? '').toString();
-      if (text.isNotEmpty) {
-        _buddyLiveTextBuffer ??= StringBuffer();
-        _buddyLiveTextBuffer!.write(text);
-      }
-    }
-
-    final modelTurn = serverContent['modelTurn'];
-    if (modelTurn is Map<String, dynamic>) {
-      final parts = modelTurn['parts'];
-      if (parts is List) {
-        for (final part in parts) {
-          if (part is! Map<String, dynamic>) continue;
-
-          final text = part['text'];
-          if (text is String && text.trim().isNotEmpty) {
-            _buddyLiveTextBuffer ??= StringBuffer();
-            _buddyLiveTextBuffer!.write(text);
-          }
-
-          final inlineData = part['inlineData'];
-          if (inlineData is! Map<String, dynamic>) continue;
-          final mimeType = (inlineData['mimeType'] ?? '').toString();
-          final dataB64 = (inlineData['data'] ?? '').toString();
-          if (!mimeType.startsWith('audio/') || dataB64.isEmpty) continue;
-
-          try {
-            final bytes = base64Decode(dataB64);
-            if (bytes.isNotEmpty) {
-              _buddyLiveAudioBuilder ??= BytesBuilder(copy: false);
-              _buddyLiveAudioBuilder!.add(bytes);
-            }
-          } catch (_) {
-            // Ignore malformed chunk and continue.
+        if (part is InlineDataPart && part.mimeType.startsWith('audio/')) {
+          if (part.bytes.isNotEmpty) {
+            audioBuilder.add(part.bytes);
           }
         }
       }
     }
 
-    if (serverContent['turnComplete'] == true) {
-      final pending = _buddyLivePending;
-      if (pending != null && !pending.isCompleted) {
-        final text = (_buddyLiveTextBuffer?.toString() ?? '').trim();
-        final audioBytes = _buddyLiveAudioBuilder?.takeBytes();
-        pending.complete(
-          BuddyDialogResponse(
-            text: text.isEmpty ? 'Unexpected response format' : text,
-            audioBytes: (audioBytes == null || audioBytes.isEmpty)
-                ? null
-                : audioBytes,
-            audioMimeType:
-                (audioBytes == null || audioBytes.isEmpty) ? null : 'audio/pcm',
-          ),
-        );
-      }
-      _buddyLivePending = null;
-      _buddyLiveAudioBuilder = null;
-      _buddyLiveTextBuffer = null;
+    final audioBytes = audioBuilder.takeBytes();
+    final inputTranscription = inputTranscriptionBuffer.toString().trim();
+    final outputTranscription = outputTranscriptionBuffer.toString().trim();
+    final text = textBuffer.toString().trim();
+    final hasAudio = audioBytes.isNotEmpty;
+    String resolvedText = '';
+    if (text.isNotEmpty) {
+      resolvedText = text;
+    } else if (outputTranscription.isNotEmpty) {
+      resolvedText = outputTranscription;
+    } else if (!hasAudio) {
+      _buddyLiveLastError =
+          _buddyLiveLastError ?? 'Buddy live returned an empty turn.';
     }
+
+    debugPrint(
+      '[BuddyLive] collected response '
+      'textLen=${text.length} '
+      'audioBytes=${audioBytes.length} '
+      'inputTxLen=${inputTranscription.length} '
+      'outputTxLen=${outputTranscription.length}',
+    );
+
+    return BuddyDialogResponse(
+      text: resolvedText,
+      audioBytes: audioBytes.isEmpty ? null : audioBytes,
+      audioMimeType: audioBytes.isEmpty ? null : 'audio/pcm',
+      inputTranscription: inputTranscription.isEmpty
+          ? null
+          : inputTranscription,
+      outputTranscription: outputTranscription.isEmpty
+          ? null
+          : outputTranscription,
+    );
   }
 
-  void _completeBuddyLivePendingWithFallback() {
-    final pending = _buddyLivePending;
-    if (pending != null && !pending.isCompleted) {
-      pending.complete(const BuddyDialogResponse(text: 'Unexpected response format'));
+  Uint8List? _prepareLivePcmChunk(
+    Uint8List raw, {
+    required int sampleRateHz,
+    required bool isFirstChunk,
+  }) {
+    var bytes = raw;
+
+    if (isFirstChunk && _looksLikeWav(bytes)) {
+      if (bytes.length <= 44) return null;
+      bytes = Uint8List.sublistView(bytes, 44);
     }
-    _buddyLivePending = null;
-    _buddyLiveAudioBuilder = null;
-    _buddyLiveTextBuffer = null;
+
+    if (_looksLikeUnsupportedAudioContainer(bytes)) {
+      _buddyLiveLastError =
+          'Buddy live audio stream appears encoded/containerized, but Gemini Live expects raw PCM16. sampleRateHz=$sampleRateHz';
+      return null;
+    }
+
+    // PCM16 must be aligned to 2-byte samples.
+    if (bytes.length.isOdd) {
+      if (bytes.length <= 1) return null;
+      bytes = Uint8List.sublistView(bytes, 0, bytes.length - 1);
+    }
+
+    return bytes;
+  }
+
+  bool _looksLikeWav(Uint8List bytes) {
+    if (bytes.length < 12) return false;
+    return bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x41 &&
+        bytes[10] == 0x56 &&
+        bytes[11] == 0x45;
+  }
+
+  bool _looksLikeUnsupportedAudioContainer(Uint8List bytes) {
+    if (bytes.length < 4) return false;
+
+    // OGG/Opus
+    final isOgg =
+        bytes[0] == 0x4F &&
+        bytes[1] == 0x67 &&
+        bytes[2] == 0x67 &&
+        bytes[3] == 0x53;
+    if (isOgg) return true;
+
+    // ADTS AAC (syncword 0xFFFx)
+    if (bytes.length >= 2) {
+      final isAdts = bytes[0] == 0xFF && (bytes[1] & 0xF0) == 0xF0;
+      if (isAdts) return true;
+    }
+
+    return false;
   }
 
   Future<void> disposeBuddyLive() async {
+    await cancelBuddyLiveAudioTurn();
     await closeBuddyLiveSession();
     await _buddyLiveInterruptedController.close();
   }
-
 }

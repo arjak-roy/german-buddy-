@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:wunderbarai/providers/chat_provider.dart';
 import 'dart:typed_data';
+import 'dart:async';
 
 import '../widgets/chat_bubble.dart';
 import '../widgets/buddy_app_bar.dart';
@@ -80,6 +81,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
 
   @override
   void dispose() {
+    unawaited(ref.read(chatProviderNotifier).cancelBuddyVoiceTurn());
     _tts.stop();
     _nativeAudioPlayer.stop();
     _nativeAudioPlayer.dispose();
@@ -141,13 +143,13 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
     void wAscii(String s) => out.add(Uint8List.fromList(s.codeUnits));
     void w16(int v) => out.add(Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF]));
     void w32(int v) => out.add(
-          Uint8List.fromList([
-            v & 0xFF,
-            (v >> 8) & 0xFF,
-            (v >> 16) & 0xFF,
-            (v >> 24) & 0xFF,
-          ]),
-        );
+      Uint8List.fromList([
+        v & 0xFF,
+        (v >> 8) & 0xFF,
+        (v >> 16) & 0xFF,
+        (v >> 24) & 0xFF,
+      ]),
+    );
 
     wAscii('RIFF');
     w32(totalSize - 8);
@@ -291,10 +293,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) {
-      return Container(
-        color: Colors.grey.shade50,
-        child: _buildContent(),
-      );
+      return Container(color: Colors.grey.shade50, child: _buildContent());
     }
 
     return PopScope(
