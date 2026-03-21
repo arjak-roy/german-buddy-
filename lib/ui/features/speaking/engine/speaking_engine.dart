@@ -51,7 +51,8 @@ class SpeakingEngine {
     }
   }
 
-  static String _normalizeToken(String token) {
+  /// Public normalization — SpeechProvider delegates here for parity.
+  static String normalizeToken(String token) {
     final trimmed = token.trim();
     if (trimmed.isEmpty) return '';
 
@@ -82,18 +83,18 @@ class SpeakingEngine {
     ).allMatches(input).map((m) => m.group(0)!).toList();
 
     final normalizedIgnore = ignoreWords
-        .map(_normalizeToken)
+        .map(normalizeToken)
         .where((t) => t.isNotEmpty)
         .toSet();
     final ignoredPhraseParts = ignoreWords
-        .map(_normalizeToken)
+        .map(normalizeToken)
         .where((e) => e.contains(' '))
         .toList();
 
     final tokens = <SpeakingWordToken>[];
 
     for (var raw in rawTokens) {
-      final normalized = _normalizeToken(raw);
+      final normalized = normalizeToken(raw);
       if (normalized.isEmpty) continue;
       tokens.add(
         SpeakingWordToken(

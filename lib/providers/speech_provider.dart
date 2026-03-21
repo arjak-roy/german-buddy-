@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../ui/features/speaking/engine/speaking_engine.dart';
+
 enum SpeechLanguage { german, english }
 
 class SpeechCaptureResult {
@@ -170,6 +172,7 @@ class SpeechProvider extends ChangeNotifier {
   static const int _minConsecutiveWordsToSwitch = 2;
   bool _isSwitchingLocale = false;
   String _sessionTranscriptPrefix = '';
+  bool _allowAutoLanguageSwitch = true;
 
   bool get speechReady => _speechReady;
   bool get isListening => _isListening;
@@ -186,8 +189,15 @@ class SpeechProvider extends ChangeNotifier {
   String get activeLocaleId => isGerman ? _germanLocaleId : _englishLocaleId;
   String get lastStatus => _lastStatus;
   String? get lastError => _lastError;
+  bool get allowAutoLanguageSwitch => _allowAutoLanguageSwitch;
   Map<String, double> get liveWordConfidence =>
       Map.unmodifiable(_liveWordConfidence);
+
+  set allowAutoLanguageSwitch(bool value) {
+    if (_allowAutoLanguageSwitch == value) return;
+    _allowAutoLanguageSwitch = value;
+    notifyListeners();
+  }
 
   double? confidenceForWord(String word) {
     final normalized = _normalizeConfidenceToken(word);
@@ -429,19 +439,21 @@ class SpeechProvider extends ChangeNotifier {
     for (final token in tokens) {
       final previousStability = _wordStability[token] ?? 0.0;
       final seenBefore = _wordLastSeenTick.containsKey(token);
-      final stabilityBoost = seenBefore ? 0.09 : 0.18;
+      // FIX 1: Returning words get a bigger boost than first-seen words.
+      final stabilityBoost = seenBefore ? 0.18 : 0.09;
       final stability = (previousStability + stabilityBoost).clamp(0.0, 1.0);
       _wordStability[token] = stability;
       _wordLastSeenTick[token] = _resultTick;
 
-      // If engine has only utterance-level confidence, estimate per-word
-      // confidence using token stability across realtime partial results.
-      final inferredWordConfidence = (0.25 + (stability * 0.65)).clamp(
+      // FIX 3: Lower floor so noise words don't immediately appear "medium".
+      final inferredWordConfidence = (0.08 + (stability * 0.82)).clamp(
         0.0,
         1.0,
       );
+      // FIX 7: Favor stability (70%) over utterance-level confidence (30%),
+      // since the utterance confidence reflects the entire phrase, not this word.
       final nextConfidence = (confidence != null && confidence > 0.0)
-          ? ((confidence * 0.7) + (inferredWordConfidence * 0.3)).clamp(
+          ? ((confidence * 0.3) + (inferredWordConfidence * 0.7)).clamp(
               0.0,
               1.0,
             )
@@ -453,16 +465,22 @@ class SpeechProvider extends ChangeNotifier {
           : ((previous * 0.55) + (nextConfidence * 0.45)).clamp(0.0, 1.0);
     }
 
-    // Light decay for tokens not present in the latest partial result.
+    // FIX 4 + FIX 8: Time-based decay — decay faster for tokens absent longer.
     for (final token in _wordStability.keys.toList()) {
       if (!tokens.contains(token)) {
-        _wordStability[token] = (_wordStability[token]! - 0.03).clamp(0.0, 1.0);
+        final lastSeenTick = _wordLastSeenTick[token] ?? _resultTick;
+        final ticksAbsent = _resultTick - lastSeenTick;
+        // Base decay 0.08, accelerating for tokens absent many ticks.
+        final decay = (0.08 + (ticksAbsent * 0.02)).clamp(0.0, 0.35);
+        _wordStability[token] = (_wordStability[token]! - decay).clamp(0.0, 1.0);
       }
     }
   }
 
+  // FIX 2: Unified normalization — delegates to SpeakingEngine._normalizeToken
+  // so that the same canonical form is used everywhere.
   String _normalizeConfidenceToken(String token) {
-    return token.toLowerCase().replaceAll(RegExp(r"[^a-z0-9äöüß]"), '').trim();
+    return SpeakingEngine.normalizeToken(token);
   }
 
   String _postProcessTranscript(String text) {
@@ -616,6 +634,7 @@ class SpeechProvider extends ChangeNotifier {
   /// Detects language from recognized text and auto-switches if confidence exceeds threshold.
   /// Threshold: at least 50% of recognized words (minimum 2 words) must match one language.
   void _autoDetectAndSwitchLanguage(String text) {
+    if (!_allowAutoLanguageSwitch) return;
     _checkMidUtteranceLanguageSwitch(text);
   }
 

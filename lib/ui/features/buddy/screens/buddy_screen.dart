@@ -2,20 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:wunderbarai/providers/chat_provider.dart';
-import 'dart:typed_data';
 import 'dart:async';
+
+import '../../../../providers/chat_provider.dart';
+import '../../../../data/repositories/live_session_repository.dart';
+import '../../../../core/utils/audio_converter.dart';
 
 import '../widgets/chat_bubble.dart';
 import '../widgets/buddy_app_bar.dart';
 import '../widgets/bottom_mic.dart';
 import '../../../../providers/app_providers.dart';
 
-/// Represents the interactive conversation screen with Buddy. A hero
-/// animation is used on the mic button so pushing this route from the
-/// home page appears seamless.
 class BuddyScreen extends ConsumerStatefulWidget {
-  // Static TTS stopper for tab navigation
   static FlutterTts? _staticTts;
   static Future<void> stopTtsIfActive() async {
     if (_staticTts != null) {
@@ -25,12 +23,6 @@ class BuddyScreen extends ConsumerStatefulWidget {
     }
   }
 
-  /// When used as a tab page inside the home scaffold we don't want to
-  /// create another [Scaffold] (nested scaffolds cause layout issues). In
-  /// that case set [embedded] to true and only the inner content is
-  /// returned. When pushed via [Navigator] the default false value will
-  /// provide the full dedicated page scaffold with its own app bar and mic
-  /// button.
   final bool embedded;
 
   const BuddyScreen({super.key, this.embedded = false});
@@ -77,7 +69,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     _nativeAudioPlayer = AudioPlayer();
     _tts = FlutterTts();
     BuddyScreen._staticTts = _tts;
-    _tts.setLanguage('de-DE'); // fallback; overridden by _applyVoiceSettings
+    _tts.setLanguage('de-DE'); 
     _tts.setPitch(1.0);
     _tts.setSpeechRate(0.45);
     _tts.awaitSpeakCompletion(false);
@@ -95,7 +87,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(ref.read(chatProviderNotifier).cancelBuddyVoiceTurn());
+    unawaited(ref.read(liveSessionRepositoryProvider.notifier).cancelBuddyVoiceTurn());
     _tts.stop();
     _nativeAudioPlayer.stop();
     _nativeAudioPlayer.dispose();
@@ -113,15 +105,16 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         WidgetsBinding.instance.window.platformBrightness;
   }
 
-  Future<void> _playLatestAiMessage(List entries, ChatProvider chat) async {
+  Future<void> _playLatestAiMessage(List entries, ChatState chatState) async {
     if (entries.isEmpty) return;
     final latest = entries.last;
     if (latest.isUser) return;
 
-    final audioToken = chat.latestAiAudioToken;
-    final audioBytes = chat.latestAiAudioBytes;
-    final audioMime = chat.latestAiAudioMimeType ?? '';
+    final audioToken = chatState.latestAiAudioToken;
+    final audioBytes = chatState.latestAiAudioBytes;
+    final audioMime = chatState.latestAiAudioMimeType ?? '';
     var playedNativeAudio = false;
+    
     if (audioToken > _lastPlayedAudioToken &&
         audioBytes != null &&
         audioBytes.isNotEmpty) {
@@ -130,12 +123,11 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         await _tts.stop();
         await _nativeAudioPlayer.stop();
         final playable = audioMime.contains('audio/pcm')
-            ? _wrapPcm16LeToWav(audioBytes)
+            ? AudioConverter.wrapPcm16LeToWav(audioBytes)
             : audioBytes;
         await _nativeAudioPlayer.play(BytesSource(playable));
         playedNativeAudio = true;
       } catch (_) {
-        // Fall back to TTS below when model audio playback fails.
       }
     }
 
@@ -144,60 +136,24 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
     _lastSpokenAiText = text;
 
-    // Fallback speech path when no native model audio is available.
     if (!playedNativeAudio) {
       try {
         await _tts.stop();
         await _tts.speak(text);
       } catch (_) {
-        // Ignore TTS runtime errors so chat flow remains uninterrupted.
       }
     }
   }
 
-  Uint8List _wrapPcm16LeToWav(Uint8List pcmData, {int sampleRate = 24000}) {
-    const channels = 1;
-    const bitsPerSample = 16;
-    final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
-    final blockAlign = channels * bitsPerSample ~/ 8;
-    final dataSize = pcmData.length;
-    final totalSize = 44 + dataSize;
-
-    final out = BytesBuilder(copy: false);
-    void wAscii(String s) => out.add(Uint8List.fromList(s.codeUnits));
-    void w16(int v) => out.add(Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF]));
-    void w32(int v) => out.add(
-      Uint8List.fromList([
-        v & 0xFF,
-        (v >> 8) & 0xFF,
-        (v >> 16) & 0xFF,
-        (v >> 24) & 0xFF,
-      ]),
-    );
-
-    wAscii('RIFF');
-    w32(totalSize - 8);
-    wAscii('WAVE');
-    wAscii('fmt ');
-    w32(16);
-    w16(1);
-    w16(channels);
-    w32(sampleRate);
-    w32(byteRate);
-    w16(blockAlign);
-    w16(bitsPerSample);
-    wAscii('data');
-    w32(dataSize);
-    out.add(pcmData);
-
-    return out.takeBytes();
-  }
-
   Widget _buildContent(bool isDark) {
-    final chat = ref.watch(chatProviderNotifier);
-    final entries = chat.messages;
+    final chatAsync = ref.watch(chatNotifierProvider);
+    final chatState = chatAsync.valueOrNull;
+    final entries = chatState?.messages ?? [];
+    final isLoading = chatAsync.isLoading;
+    
+    final liveSession = ref.watch(liveSessionRepositoryProvider);
 
-    if (chat.isBuddyPreparing && !chat.isBuddyLiveReady) {
+    if (liveSession.isBuddyPreparing && !liveSession.isBuddyLiveReady) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -217,16 +173,14 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       );
     }
 
-    if (chat.buddyInterruptToken > _lastInterruptToken) {
-      _lastInterruptToken = chat.buddyInterruptToken;
+    if (liveSession.buddyInterruptToken > _lastInterruptToken) {
+      _lastInterruptToken = liveSession.buddyInterruptToken;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await _nativeAudioPlayer.stop();
         await _tts.stop();
       });
     }
 
-    // Establish baseline on first render so historical messages are not
-    // spoken when opening/reopening the page.
     if (_lastCount == -1) {
       _lastCount = entries.length;
     }
@@ -238,8 +192,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       _didInitialBottomJump = true;
     }
 
-    if (entries.isEmpty) {
-      // show onboarding hint but keep mic accessible
+    if (entries.isEmpty && !isLoading) {
       return Column(
         children: [
           Expanded(
@@ -262,28 +215,28 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       );
     }
 
-    // if new message added, scroll to bottom after frame
     if (entries.length > _lastCount) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom(animate: true);
       });
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _playLatestAiMessage(entries, chat);
-      });
+      if (chatState != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _playLatestAiMessage(entries, chatState);
+        });
+      }
 
       _lastCount = entries.length;
     }
 
     if (widget.embedded) {
-      // floating mic at bottom over the scrollable list
       return Stack(
         children: [
           SafeArea(
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(12, 16, 12, 118),
-              itemCount: entries.length + (chat.isLoading ? 1 : 0),
+              itemCount: entries.length + (isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index < entries.length) {
                   final e = entries[index];
@@ -294,7 +247,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                     isDark: isDark,
                   );
                 }
-                // loading placeholder bubble
                 return const ChatMessage(
                   text: 'Buddy is thinking...',
                   isUser: false,
@@ -319,14 +271,20 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              itemCount: entries.length,
+              itemCount: entries.length + (isLoading ? 1 : 0),
               itemBuilder: (context, index) {
-                final e = entries[index];
-                return ChatMessage(
-                  text: e.text,
-                  translated: e.translated,
-                  isUser: e.isUser,
-                  isDark: isDark,
+                if (index < entries.length) {
+                  final e = entries[index];
+                  return ChatMessage(
+                    text: e.text,
+                    translated: e.translated,
+                    isUser: e.isUser,
+                    isDark: isDark,
+                  );
+                }
+                return const ChatMessage(
+                  text: 'Buddy is thinking...',
+                  isUser: false,
                 );
               },
             ),

@@ -1,19 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ui/features/speaking/engine/speaking_engine.dart';
-import '../ui/features/speaking/models/speaking_exercise_item.dart';
+import '../ui/features/speaking/engine/speaking_engine_models.dart';
 
-final speakingEngineProvider = Provider.family<SpeakingEngine, SpeakingExerciseItem>((
+final speakingEngineProvider = Provider.family<SpeakingEngine, SpeakingExercise>((
   ref,
   item,
 ) {
-  // Derive a usable "script" from the item: prefer usefulPhrases, then prompt, then description.
-  final script = (item.usefulPhrases.isNotEmpty)
-      ? item.usefulPhrases
-      : (item.prompt.isNotEmpty ? [item.prompt] : [item.description]);
+  // Use script from item.
+  final script = item.script;
 
-  // Build ignored words set by looking for bracketed placeholders and literal ellipses.
-  final extractedIgnored = <String>{};
+  // Build ignored words set by combining explicit ignoreWords and bracketed placeholders.
+  final extractedIgnored = Set<String>.from(item.ignoreWords);
   final bracketRE = RegExp(r"\[([^\]]+)\]");
   for (final s in script) {
     for (final m in bracketRE.allMatches(s)) {
@@ -25,7 +23,7 @@ final speakingEngineProvider = Provider.family<SpeakingEngine, SpeakingExerciseI
 
   return SpeakingEngine(
     script: script,
-    translations: {},
+    translations: item.translations,
     ignoreWords: extractedIgnored,
   );
 });

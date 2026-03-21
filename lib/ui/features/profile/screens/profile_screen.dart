@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../providers/app_providers.dart';
+import '../../../../providers/speaking_session_provider.dart';
+import '../../../../ui/features/speaking/engine/speaking_exercises.dart';
 import '../models/profile_model.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -15,7 +17,7 @@ class ProfileScreen extends ConsumerWidget {
     final profile = ref.watch(currentUserProfileProvider);
     final analysis = ref.watch(pronunciationAnalysisProviderNotifier);
     final speakingPractice = ref.watch(
-      introduceYourselfPracticeProviderNotifier,
+      speakingSessionNotifierProvider(defaultSpeakingExercises.first),
     );
 
     String formatTimestamp(dynamic value) {

@@ -14,6 +14,7 @@ class SpeakingExercise {
   final String? scenario;
   final String? prompt;
   final List<String>? usefulPhrases;
+  final String? spokenName;
 
   const SpeakingExercise({
     required this.id,
@@ -25,6 +26,7 @@ class SpeakingExercise {
     this.scenario,
     this.prompt,
     this.usefulPhrases,
+    this.spokenName,
   });
 }
 
