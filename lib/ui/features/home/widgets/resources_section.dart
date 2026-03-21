@@ -34,10 +34,12 @@ class ResourcesSection extends StatelessWidget {
             mainAxisSpacing: 12,
             physics: const NeverScrollableScrollPhysics(),
             children: items
-                .map((i) => ResourceCard(
-                      icon: i['icon'] as IconData,
-                      title: i['title'] as String,
-                    ))
+                .map(
+                  (i) => ResourceCard(
+                    icon: i['icon'] as IconData,
+                    title: i['title'] as String,
+                  ),
+                )
                 .toList(),
           ),
         ),

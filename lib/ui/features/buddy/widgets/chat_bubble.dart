@@ -6,11 +6,13 @@ class ChatMessage extends StatelessWidget {
   final String text;
   final String? translated;
   final bool isUser;
+  final bool isDark;
 
   const ChatMessage({
     required this.text,
     this.translated,
     this.isUser = false,
+    this.isDark = false,
     super.key,
   });
 
@@ -32,20 +34,49 @@ class ChatMessage extends StatelessWidget {
     return false;
   }
 
+  MarkdownStyleSheet _markdownStyle(BuildContext context, Color textColor) {
+    final scheme = Theme.of(context).colorScheme;
+    return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+      p: TextStyle(color: textColor),
+      strong: TextStyle(color: textColor, fontWeight: FontWeight.w700),
+      em: TextStyle(color: textColor, fontStyle: FontStyle.italic),
+      code: TextStyle(
+        color: textColor,
+        backgroundColor: scheme.surface.withOpacity(0.12),
+        fontFamily: 'monospace',
+      ),
+      blockquote: TextStyle(color: textColor.withOpacity(0.85)),
+      tableBorder: TableBorder.all(color: scheme.onSurface.withOpacity(0.20)),
+      tableCellsPadding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 8,
+      ),
+      tableHead: TextStyle(color: textColor, fontWeight: FontWeight.w700),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final defaultBubbleMaxWidth =
-        screenWidth < 420 ? screenWidth * 0.82 : screenWidth * 0.74;
+    final defaultBubbleMaxWidth = screenWidth < 420
+        ? screenWidth * 0.82
+        : screenWidth * 0.74;
 
-    // choose a light background for buddy; white on white makes bubble
-    // invisible. also add a slight drop shadow for separation.
-    final bubbleColor = isUser ? Colors.blue : Colors.grey.shade100;
-    final textColor = isUser ? Colors.white : Colors.black87;
-    final translateColor = isUser ? Colors.white70 : Colors.blueGrey;
-    final aiHasTable = !isUser && _containsMarkdownTable(text);
-    final bubbleMaxWidth = aiHasTable
-        ? screenWidth - 56  // 32 avatar + 8 gap + 8 outer padding each side
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bubbleColor = isUser
+        ? scheme.primary
+        : isDark
+        ? scheme.surface.withOpacity(0.92)
+        : scheme.surfaceVariant;
+    final textColor = isUser ? scheme.onPrimary : scheme.onSurface;
+    final translateColor = isUser
+        ? scheme.onPrimary.withOpacity(0.75)
+        : scheme.onSurfaceVariant;
+    final hasTable = _containsMarkdownTable(text);
+    final bubbleMaxWidth = hasTable
+        ? screenWidth -
+              56 // 32 avatar + 8 gap + 8 outer padding each side
         : defaultBubbleMaxWidth;
     final borderRadius = BorderRadius.only(
       topLeft: const Radius.circular(16),
@@ -65,75 +96,42 @@ class ChatMessage extends StatelessWidget {
             borderRadius: borderRadius,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 4,
+                color: isDark
+                    ? Colors.black.withOpacity(0.45)
+                    : Colors.black.withOpacity(0.08),
+                blurRadius: isDark ? 10 : 4,
+                spreadRadius: isDark ? 1 : 0,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
           child: isUser
-              ? Text(
-                  text,
-                  style: TextStyle(color: textColor),
-                  softWrap: true,
-                )
-              : (aiHasTable
-                  ? SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: IntrinsicWidth(
-                        child: MarkdownBody(
-                          data: text,
-                          extensionSet: md.ExtensionSet.gitHubFlavored,
-                          softLineBreak: true,
-                          styleSheet:
-                              MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                            p: TextStyle(color: textColor),
-                            strong:
-                                TextStyle(color: textColor, fontWeight: FontWeight.w700),
-                            em: TextStyle(color: textColor, fontStyle: FontStyle.italic),
-                            code: TextStyle(
-                              color: textColor,
-                              backgroundColor: Colors.black.withValues(alpha: 0.06),
-                              fontFamily: 'monospace',
+              ? Text(text, style: TextStyle(color: textColor), softWrap: true)
+              : (hasTable
+                    ? LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minWidth: constraints.maxWidth,
+                              ),
+                              child: MarkdownBody(
+                                data: text,
+                                extensionSet: md.ExtensionSet.gitHubFlavored,
+                                softLineBreak: true,
+                                styleSheet: _markdownStyle(context, textColor),
+                              ),
                             ),
-                            blockquote:
-                                TextStyle(color: textColor.withValues(alpha: 0.85)),
-                            tableBorder: TableBorder.all(
-                              color: Colors.black.withValues(alpha: 0.12),
-                            ),
-                            tableCellsPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            tableHead:
-                                TextStyle(color: textColor, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ),
-                    )
-                  : MarkdownBody(
-                      data: text,
-                      extensionSet: md.ExtensionSet.gitHubFlavored,
-                      softLineBreak: true,
-                      styleSheet:
-                          MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                        p: TextStyle(color: textColor),
-                        strong: TextStyle(color: textColor, fontWeight: FontWeight.w700),
-                        em: TextStyle(color: textColor, fontStyle: FontStyle.italic),
-                        code: TextStyle(
-                          color: textColor,
-                          backgroundColor: Colors.black.withValues(alpha: 0.06),
-                          fontFamily: 'monospace',
-                        ),
-                        blockquote:
-                            TextStyle(color: textColor.withValues(alpha: 0.85)),
-                        tableBorder: TableBorder.all(
-                          color: Colors.black.withValues(alpha: 0.12),
-                        ),
-                        tableCellsPadding:
-                            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        tableHead:
-                            TextStyle(color: textColor, fontWeight: FontWeight.w700),
-                      ),
-                    )),
+                          );
+                        },
+                      )
+                    : MarkdownBody(
+                        data: text,
+                        extensionSet: md.ExtensionSet.gitHubFlavored,
+                        softLineBreak: true,
+                        styleSheet: _markdownStyle(context, textColor),
+                      )),
         ),
         if (translated != null)
           Padding(
@@ -142,12 +140,13 @@ class ChatMessage extends StatelessWidget {
               translated!,
               softWrap: true,
               style: TextStyle(
-                  fontStyle: FontStyle.italic,
-                  fontSize: 12,
-                  color: translateColor),
+                fontStyle: FontStyle.italic,
+                fontSize: 12,
+                color: translateColor,
+              ),
             ),
           ),
-        if (aiHasTable)
+        if (hasTable)
           Padding(
             padding: const EdgeInsets.only(top: 6.0),
             child: Align(
@@ -159,8 +158,10 @@ class ChatMessage extends StatelessWidget {
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFF25D366),
                   textStyle: const TextStyle(fontSize: 13),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                 ),
               ),
             ),
@@ -173,16 +174,26 @@ class ChatMessage extends StatelessWidget {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: isUser ? Colors.brown[200] : Colors.black,
+        color: isUser
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Theme.of(context).colorScheme.secondaryContainer,
         shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Icon(
+          isUser ? Icons.person : Icons.chat_bubble_outline,
+          size: 16,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: isUser
             ? [
@@ -194,11 +205,8 @@ class ChatMessage extends StatelessWidget {
             : [
                 avatar,
                 const SizedBox(width: 8),
-                if (aiHasTable) Expanded(child: bubble)
-                else ...[
-                  Flexible(child: bubble),
-                  Expanded(child: const SizedBox()),
-                ],
+                Flexible(child: bubble),
+                Expanded(child: const SizedBox()),
               ],
       ),
     );

@@ -13,7 +13,8 @@ class BreadItem {
 }
 
 class BreadShopNegotiation {
-  final String action; // 'offer_item', 'counter_offer', 'accept', 'reject', 'complete_sale'
+  final String
+  action; // 'offer_item', 'counter_offer', 'accept', 'reject', 'complete_sale'
   final String item; // Item name or empty
   final double itemPrice; // EUR
   final int quantity;
@@ -44,7 +45,8 @@ class BreadShopNegotiation {
     double parsePrice(dynamic value) {
       if (value is double) return value.clamp(0.0, 100.0);
       if (value is num) return value.toDouble().clamp(0.0, 100.0);
-      if (value is String) return (double.tryParse(value) ?? 0.0).clamp(0.0, 100.0);
+      if (value is String)
+        return (double.tryParse(value) ?? 0.0).clamp(0.0, 100.0);
       return 0.0;
     }
 
@@ -60,7 +62,8 @@ class BreadShopNegotiation {
       totalPrice: total,
       shopkeeperResponse: (args['shopkeeperResponse'] ?? '').toString().trim(),
       englishTranslation: (args['englishTranslation'] ?? '').toString().trim(),
-      dealAccepted: (args['dealAccepted'] ?? false).toString().toLowerCase() == 'true',
+      dealAccepted:
+          (args['dealAccepted'] ?? false).toString().toLowerCase() == 'true',
     );
   }
 }

@@ -21,6 +21,34 @@ class PronunciationAnalysisProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasReport => report != null;
+  Map<String, PronunciationAnalysisReport> get allReports =>
+      Map.unmodifiable(_reportsByWord);
+
+  double get averageScore {
+    if (_reportsByWord.isEmpty) return 0.0;
+    final total = _reportsByWord.values.fold<int>(
+      0,
+      (previousValue, report) => previousValue + report.overallScore,
+    );
+    return total / _reportsByWord.length;
+  }
+
+  String? get topPerformer {
+    if (_reportsByWord.isEmpty) return null;
+    final bestEntry = _reportsByWord.entries.reduce(
+      (a, b) => a.value.overallScore >= b.value.overallScore ? a : b,
+    );
+    return '${bestEntry.key.split('|').first} (${bestEntry.value.overallScore}/100)';
+  }
+
+  String? get improvementTarget {
+    if (_reportsByWord.isEmpty) return null;
+    final worstEntry = _reportsByWord.entries.reduce(
+      (a, b) => a.value.overallScore <= b.value.overallScore ? a : b,
+    );
+    return '${worstEntry.key.split('|').first} (${worstEntry.value.overallScore}/100)';
+  }
+
   String? get analyzedFilePath => _currentWordKey == null
       ? null
       : _analyzedFilePathsByWord[_currentWordKey];

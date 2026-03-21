@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../providers/app_providers.dart';
+import '../../../../providers/profile_provider.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -17,6 +18,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String _languageLevel = 'B1';
 
   @override
   void dispose() {
@@ -26,19 +28,191 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     super.dispose();
   }
 
+  Future<String?> _showLanguageLevelDialog({
+    required String currentLevel,
+  }) async {
+    final selected = await showGeneralDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Select German level',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (context, animation1, animation2) {
+        final levels = ['A1', 'A2', 'B1', 'B2'];
+        String localSelected = currentLevel;
+
+        return SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Material(
+                color: Colors.transparent,
+                child: StatefulBuilder(
+                  builder: (context, setState) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.25),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Select your German level',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 10),
+                          GridView.count(
+                            crossAxisCount: 2,
+                            shrinkWrap: true,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 2.4,
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: levels.map((level) {
+                              final selectedStyle = localSelected == level;
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    localSelected = level;
+                                  });
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  decoration: BoxDecoration(
+                                    color: selectedStyle
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.surfaceVariant,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: selectedStyle
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withOpacity(0.25),
+                                      width: selectedStyle ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      level,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: selectedStyle
+                                                ? Theme.of(
+                                                    context,
+                                                  ).colorScheme.onPrimary
+                                                : Theme.of(
+                                                    context,
+                                                  ).colorScheme.onSurface,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(null),
+                                child: const Text('Cancel'),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(localSelected),
+                                child: const Text('Save'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutBack,
+        );
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.90, end: 1).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+
+    return selected;
+  }
+
+  Future<void> _maybePromptLanguageLevel() async {
+    final user = ref.read(authRepositoryProvider).currentUser;
+    if (user == null) return;
+
+    final existing = await ref
+        .read(userProfileRepositoryProvider)
+        .getLanguageLevel(user.id);
+    if (existing != null && existing.isNotEmpty) return;
+
+    final chosen = await _showLanguageLevelDialog(
+      currentLevel: existing ?? _languageLevel,
+    );
+    if (chosen != null) {
+      setState(() {
+        _languageLevel = chosen;
+      });
+      await ref.read(authControllerProvider.notifier).setLanguageLevel(chosen);
+    }
+  }
+
   Future<void> _submit() async {
     final messenger = ScaffoldMessenger.of(context);
     final valid = _formKey.currentState?.validate() ?? false;
     if (!valid) return;
 
-    await ref.read(authControllerProvider.notifier).signUp(
+    await ref
+        .read(authControllerProvider.notifier)
+        .signUp(
           email: _emailController.text,
           password: _passwordController.text,
         );
 
     final state = ref.read(authControllerProvider);
-    state.whenOrNull(
-      data: (_) {
+    state.when(
+      loading: () {},
+      data: (_) async {
+        if (!mounted) return;
+        await _maybePromptLanguageLevel();
         if (!mounted) return;
         Navigator.of(context).pop();
       },
@@ -124,7 +298,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             validator: (value) {
                               final email = (value ?? '').trim();
                               if (email.isEmpty) return 'Email is required';
-                              final regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                              final regex = RegExp(
+                                r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                              );
                               if (!regex.hasMatch(email)) {
                                 return 'Enter a valid email';
                               }
@@ -215,8 +391,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             child: ElevatedButton(
                               onPressed: isLoading ? null : _submit,
                               style: ElevatedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 backgroundColor: const Color(0xFF1D4ED8),
                                 foregroundColor: Colors.white,
                               ),

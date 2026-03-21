@@ -91,8 +91,9 @@ class _VoiceSettingsSheetState extends ConsumerState<VoiceSettingsSheet> {
                 const SizedBox(width: 10),
                 Text(
                   'German Voice',
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -100,8 +101,9 @@ class _VoiceSettingsSheetState extends ConsumerState<VoiceSettingsSheet> {
             Text(
               'Choose which German voice to use for text-to-speech. '
               'Tap ▶ to preview.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             if (!vp.loaded)
@@ -118,8 +120,11 @@ class _VoiceSettingsSheetState extends ConsumerState<VoiceSettingsSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.voice_over_off,
-                          size: 40, color: scheme.outlineVariant),
+                      Icon(
+                        Icons.voice_over_off,
+                        size: 40,
+                        color: scheme.outlineVariant,
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         'No German voices found on this device.\n'
@@ -151,10 +156,11 @@ class _VoiceSettingsSheetState extends ConsumerState<VoiceSettingsSheet> {
                         groupValue: vp.selectedName,
                         onChanged: (_) => vp.setVoice(name, locale),
                       ),
-                      title:
-                          Text(name, style: const TextStyle(fontSize: 14)),
-                      subtitle:
-                          Text(locale, style: const TextStyle(fontSize: 12)),
+                      title: Text(name, style: const TextStyle(fontSize: 14)),
+                      subtitle: Text(
+                        locale,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                       trailing: _previewing
                           ? const SizedBox(
                               width: 20,
@@ -168,8 +174,9 @@ class _VoiceSettingsSheetState extends ConsumerState<VoiceSettingsSheet> {
                             ),
                       onTap: () => vp.setVoice(name, locale),
                       selected: selected,
-                      selectedTileColor:
-                          scheme.primaryContainer.withOpacity(0.3),
+                      selectedTileColor: scheme.primaryContainer.withOpacity(
+                        0.3,
+                      ),
                     );
                   },
                 ),

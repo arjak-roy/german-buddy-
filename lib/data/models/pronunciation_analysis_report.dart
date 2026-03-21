@@ -4,6 +4,8 @@ class PronunciationPhonemeFeedback {
   final String observed;
   final String lipShape;
   final String tip;
+  final int startMs;
+  final int endMs;
 
   const PronunciationPhonemeFeedback({
     required this.phoneme,
@@ -11,6 +13,8 @@ class PronunciationPhonemeFeedback {
     required this.observed,
     required this.lipShape,
     required this.tip,
+    required this.startMs,
+    required this.endMs,
   });
 
   factory PronunciationPhonemeFeedback.fromMap(Map<String, dynamic> map) {
@@ -22,12 +26,23 @@ class PronunciationPhonemeFeedback {
       return 'partial';
     }
 
+    int parseMs(dynamic value) {
+      if (value is int) return value.clamp(0, 3600000);
+      if (value is num) return value.round().clamp(0, 3600000);
+      if (value is String) {
+        return (int.tryParse(value) ?? 0).clamp(0, 3600000);
+      }
+      return 0;
+    }
+
     return PronunciationPhonemeFeedback(
       phoneme: (map['phoneme'] ?? '').toString().trim(),
       status: parseStatus(map['status']),
       observed: (map['observed'] ?? '').toString().trim(),
       lipShape: (map['lipShape'] ?? '').toString().trim(),
       tip: (map['tip'] ?? '').toString().trim(),
+      startMs: parseMs(map['startMs'] ?? map['start_ms'] ?? 0),
+      endMs: parseMs(map['endMs'] ?? map['end_ms'] ?? 0),
     );
   }
 }

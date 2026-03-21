@@ -64,7 +64,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '381763033963',
     projectId: 'language-buddy-a626a',
     storageBucket: 'language-buddy-a626a.firebasestorage.app',
-    iosClientId: '381763033963-o5po8dv6eh785a6ti00ctvpmjfqdg62b.apps.googleusercontent.com',
+    iosClientId:
+        '381763033963-o5po8dv6eh785a6ti00ctvpmjfqdg62b.apps.googleusercontent.com',
     iosBundleId: 'com.example.wunderbarai',
   );
 
@@ -74,7 +75,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '381763033963',
     projectId: 'language-buddy-a626a',
     storageBucket: 'language-buddy-a626a.firebasestorage.app',
-    iosClientId: '381763033963-o5po8dv6eh785a6ti00ctvpmjfqdg62b.apps.googleusercontent.com',
+    iosClientId:
+        '381763033963-o5po8dv6eh785a6ti00ctvpmjfqdg62b.apps.googleusercontent.com',
     iosBundleId: 'com.example.wunderbarai',
   );
 

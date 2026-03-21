@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../providers/app_providers.dart';
+import '../../../../providers/chat_provider.dart';
 import '../../../shared/widgets/speech_action_bar.dart';
 
 class BottomMic extends ConsumerWidget {
@@ -11,7 +11,7 @@ class BottomMic extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return SpeechActionBar(
       onSubmitted: (text) async {
-        await ref.read(chatProviderNotifier).sendMessage(text);
+        await ref.read(chatNotifierProvider.notifier).sendMessage(text);
       },
     );
   }

@@ -69,7 +69,9 @@ class _PronunciationMiniLabState extends State<PronunciationMiniLab> {
     final perSegmentMs = (950 - (_speechRate * 700)).clamp(250, 900).toInt();
     var tick = 0;
 
-    _segmentTimer = Timer.periodic(Duration(milliseconds: perSegmentMs), (timer) {
+    _segmentTimer = Timer.periodic(Duration(milliseconds: perSegmentMs), (
+      timer,
+    ) {
       if (!mounted) {
         timer.cancel();
         return;
@@ -171,7 +173,9 @@ class _PronunciationMiniLabState extends State<PronunciationMiniLab> {
           children: [
             FilledButton.icon(
               onPressed: _playWord,
-              icon: Icon(_isPlaying ? Icons.equalizer : Icons.volume_up_rounded),
+              icon: Icon(
+                _isPlaying ? Icons.equalizer : Icons.volume_up_rounded,
+              ),
               label: Text(_isPlaying ? 'Playing...' : 'Hear word'),
             ),
             const SizedBox(width: 10),
