@@ -11,7 +11,9 @@ class ThemeModeButton extends ConsumerWidget {
     final themeProvider = ref.watch(themeProviderNotifier);
 
     return IconButton(
-      tooltip: themeProvider.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+      tooltip: themeProvider.isDark
+          ? 'Switch to light mode'
+          : 'Switch to dark mode',
       onPressed: () => ref.read(themeProviderNotifier).toggle(),
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.all(8),
@@ -23,7 +25,9 @@ class ThemeModeButton extends ConsumerWidget {
           child: FadeTransition(opacity: animation, child: child),
         ),
         child: Icon(
-          themeProvider.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          themeProvider.isDark
+              ? Icons.light_mode_rounded
+              : Icons.dark_mode_rounded,
           key: ValueKey<bool>(themeProvider.isDark),
           size: 22,
         ),

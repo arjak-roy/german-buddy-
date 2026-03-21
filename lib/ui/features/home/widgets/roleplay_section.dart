@@ -110,7 +110,9 @@ class _RoleplaySectionState extends State<RoleplaySection> {
               if (widget.showHeader)
                 Text(
                   'See all',
-                  style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 )
               else
                 const SizedBox.shrink(),

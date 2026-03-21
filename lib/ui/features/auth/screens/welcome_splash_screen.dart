@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 class WelcomeSplashScreen extends StatefulWidget {
   final VoidCallback onFinished;
 
-  const WelcomeSplashScreen({
-    super.key,
-    required this.onFinished,
-  });
+  const WelcomeSplashScreen({super.key, required this.onFinished});
 
   @override
   State<WelcomeSplashScreen> createState() => _WelcomeSplashScreenState();
@@ -108,10 +105,7 @@ class _WelcomeSplashScreenState extends State<WelcomeSplashScreen>
                             child: Align(
                               alignment: Alignment.centerLeft,
                               widthFactor: progress,
-                              child: const Text(
-                                'Hello',
-                                style: helloStyle,
-                              ),
+                              child: const Text('Hello', style: helloStyle),
                             ),
                           ),
                           Positioned(

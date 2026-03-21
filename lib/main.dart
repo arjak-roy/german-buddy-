@@ -52,6 +52,7 @@ class _EntryPointState extends ConsumerState<EntryPoint> {
 
       if (!_hasSeenInitialAuthSnapshot) {
         _hasSeenInitialAuthSnapshot = true;
+        // Do not show splash on app start for already signed-in users.
         return;
       }
 
@@ -78,9 +79,8 @@ class _EntryPointState extends ConsumerState<EntryPoint> {
 
     return authSession.when(
       data: (user) => user != null ? const HomeScreen() : const LoginScreen(),
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, stackTrace) => const LoginScreen(),
     );
   }

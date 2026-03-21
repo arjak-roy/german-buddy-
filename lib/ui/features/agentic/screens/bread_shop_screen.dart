@@ -44,30 +44,44 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
     [
       _HintPhrase('Guten Morgen!', 'Good morning!'),
       _HintPhrase('Ich möchte Brot kaufen.', 'I would like to buy bread.'),
-      _HintPhrase('Was haben Sie heute frisch?', 'What do you have fresh today?'),
-      _HintPhrase('Ich suche etwas Süßes.', 'I am looking for something sweet.'),
+      _HintPhrase(
+        'Was haben Sie heute frisch?',
+        'What do you have fresh today?',
+      ),
+      _HintPhrase(
+        'Ich suche etwas Süßes.',
+        'I am looking for something sweet.',
+      ),
     ],
     // Stage 1 – ordering items
     [
       _HintPhrase('Ich nehme zwei Brötchen.', 'I will take two bread rolls.'),
       _HintPhrase('Haben Sie Croissants?', 'Do you have croissants?'),
       _HintPhrase('Ein Bauernbrot, bitte.', 'One farmhouse bread, please.'),
-      _HintPhrase('Was kostet der Apfelstrudel?', 'How much is the apple strudel?'),
+      _HintPhrase(
+        'Was kostet der Apfelstrudel?',
+        'How much is the apple strudel?',
+      ),
       _HintPhrase('Drei Brezel, bitte.', 'Three pretzels, please.'),
     ],
     // Stage 2 – negotiating price
     [
       _HintPhrase('Können Sie einen Rabatt geben?', 'Can you give a discount?'),
       _HintPhrase('Das ist etwas teuer.', 'That is a bit expensive.'),
-      _HintPhrase('Ich kaufe fünf – gibt es einen Mengenrabatt?',
-          'I am buying five - is there a bulk discount?'),
+      _HintPhrase(
+        'Ich kaufe fünf – gibt es einen Mengenrabatt?',
+        'I am buying five - is there a bulk discount?',
+      ),
       _HintPhrase('Wie wäre es mit €2,00?', 'How about EUR 2.00?'),
       _HintPhrase('Einverstanden!', 'Agreed!'),
     ],
     // Stage 3 – wrapping up
     [
       _HintPhrase('Noch etwas, bitte.', 'Something else, please.'),
-      _HintPhrase('Ich nehme auch ein Croissant.', 'I will also take a croissant.'),
+      _HintPhrase(
+        'Ich nehme auch ein Croissant.',
+        'I will also take a croissant.',
+      ),
       _HintPhrase('Das reicht, danke.', 'That is enough, thank you.'),
       _HintPhrase('Tschüss und auf Wiedersehen!', 'Bye and see you again!'),
     ],
@@ -76,8 +90,9 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
   List<_HintPhrase> get _currentHints {
     if (_dealComplete || _missionFailed) return [];
     if (_transactions.isEmpty) return _hints[0];
-    final hasCounterOffer = _transactions
-        .any((t) => t.action == 'counter_offer' || t.action == 'reject');
+    final hasCounterOffer = _transactions.any(
+      (t) => t.action == 'counter_offer' || t.action == 'reject',
+    );
     if (_bagItems.isNotEmpty) return _hints[3];
     if (hasCounterOffer) return _hints[2];
     return _hints[1];
@@ -302,22 +317,49 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                 'ordering and negotiating with the baker.',
               ),
               SizedBox(height: 16),
-              _HowToRow(icon: '🗣️', text: 'Tap the mic or type in German to speak to the baker.'),
-              _HowToRow(icon: '🛒', text: 'Ask for items: "Ich möchte zwei Brötchen."'),
-              _HowToRow(icon: '💰', text: 'Negotiate prices — bulk orders get discounts!'),
-              _HowToRow(icon: '✅', text: 'Accept a deal: "Einverstanden!" or "Abgemacht!"'),
-              _HowToRow(icon: '👜', text: 'Accepted items land in your shopping bag.'),
-              _HowToRow(icon: '🏁', text: 'Say "Das reicht, danke!" or "Tschüss!" when done.'),
+              _HowToRow(
+                icon: '🗣️',
+                text: 'Tap the mic or type in German to speak to the baker.',
+              ),
+              _HowToRow(
+                icon: '🛒',
+                text: 'Ask for items: "Ich möchte zwei Brötchen."',
+              ),
+              _HowToRow(
+                icon: '💰',
+                text: 'Negotiate prices — bulk orders get discounts!',
+              ),
+              _HowToRow(
+                icon: '✅',
+                text: 'Accept a deal: "Einverstanden!" or "Abgemacht!"',
+              ),
+              _HowToRow(
+                icon: '👜',
+                text: 'Accepted items land in your shopping bag.',
+              ),
+              _HowToRow(
+                icon: '🏁',
+                text: 'Say "Das reicht, danke!" or "Tschüss!" when done.',
+              ),
               SizedBox(height: 16),
               Text(
                 'Useful phrases',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 6),
-              _PhraseRow(de: 'Was haben Sie heute frisch?', en: 'What do you have fresh today?'),
+              _PhraseRow(
+                de: 'Was haben Sie heute frisch?',
+                en: 'What do you have fresh today?',
+              ),
               _PhraseRow(de: 'Was kostet das?', en: 'How much does that cost?'),
-              _PhraseRow(de: 'Können Sie einen Rabatt geben?', en: 'Can you give a discount?'),
-              _PhraseRow(de: 'Ich nehme das Angebot!', en: "I'll take the offer!"),
+              _PhraseRow(
+                de: 'Können Sie einen Rabatt geben?',
+                en: 'Can you give a discount?',
+              ),
+              _PhraseRow(
+                de: 'Ich nehme das Angebot!',
+                en: "I'll take the offer!",
+              ),
               _PhraseRow(de: 'Das ist zu teuer.', en: 'That is too expensive.'),
             ],
           ),
@@ -389,8 +431,7 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: _BudgetCard(
-                            spent: _totalSpent, budget: _budget),
+                        child: _BudgetCard(spent: _totalSpent, budget: _budget),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -404,10 +445,7 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: _BakerCharacterCard(
-                    mood: _bakerMood,
-                    cue: _bakerCue,
-                  ),
+                  child: _BakerCharacterCard(mood: _bakerMood, cue: _bakerCue),
                 ),
                 const SizedBox(height: 2),
 
@@ -429,11 +467,12 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                             german: _staticGreeting,
                             english: _staticGreetingEn,
                           ),
-                          ..._transactions.map((t) => Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 6),
-                                child: _TransactionCard(transaction: t),
-                              )),
+                          ..._transactions.map(
+                            (t) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: _TransactionCard(transaction: t),
+                            ),
+                          ),
                           // Error message
                           if (_errorMessage != null)
                             Padding(
@@ -442,23 +481,33 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [scheme.errorContainer, scheme.surface],
+                                    colors: [
+                                      scheme.errorContainer,
+                                      scheme.surface,
+                                    ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
+                                  border: Border.all(
+                                    color: scheme.error.withValues(alpha: 0.35),
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.error_outline,
-                                        color: scheme.error, size: 18),
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: scheme.error,
+                                      size: 18,
+                                    ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
                                         _errorMessage!,
                                         style: theme.textTheme.bodySmall
-                                            ?.copyWith(color: scheme.onErrorContainer),
+                                            ?.copyWith(
+                                              color: scheme.onErrorContainer,
+                                            ),
                                       ),
                                     ),
                                   ],
@@ -477,7 +526,8 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                                       width: 16,
                                       height: 16,
                                       child: CircularProgressIndicator(
-                                          strokeWidth: 2),
+                                        strokeWidth: 2,
+                                      ),
                                     ),
                                     SizedBox(width: 8),
                                     Text('Baker is weighing your offer...'),
@@ -495,12 +545,13 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                           child: _HintStrip(
                             hints: _currentHints,
                             onHintTap: (hint) {
-                              if (!_isLoading && !_dealComplete && !_missionFailed) {
+                              if (!_isLoading &&
+                                  !_dealComplete &&
+                                  !_missionFailed) {
                                 _handleUtterance(hint.de);
                               }
                             },
-                            onDismiss: () =>
-                                setState(() => _showHints = false),
+                            onDismiss: () => setState(() => _showHints = false),
                           ),
                         ),
                     ],
@@ -565,8 +616,9 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
                         ] else ...[
                           Text(
                             'Vielen Dank! Auf Wiedersehen!',
-                            style: theme.textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 4),
@@ -583,9 +635,7 @@ class _BreadShopScreenState extends ConsumerState<BreadShopScreen>
           ),
           // Confetti overlay
           if (_dealComplete)
-            IgnorePointer(
-              child: _Confetti(controller: _confettiController),
-            ),
+            IgnorePointer(child: _Confetti(controller: _confettiController)),
         ],
       ),
     );
@@ -647,8 +697,7 @@ class _StaticGreetingCard extends StatelessWidget {
   final String german;
   final String english;
 
-  const _StaticGreetingCard(
-      {required this.german, required this.english});
+  const _StaticGreetingCard({required this.german, required this.english});
 
   @override
   Widget build(BuildContext context) {
@@ -660,12 +709,18 @@ class _StaticGreetingCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [scheme.primaryContainer.withValues(alpha: 0.75), scheme.surface],
+            colors: [
+              scheme.primaryContainer.withValues(alpha: 0.75),
+              scheme.surface,
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: scheme.primary.withValues(alpha: 0.26), width: 1),
+          border: Border.all(
+            color: scheme.primary.withValues(alpha: 0.26),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
               color: scheme.primary.withValues(alpha: 0.10),
@@ -691,8 +746,10 @@ class _StaticGreetingCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(999),
@@ -709,13 +766,16 @@ class _StaticGreetingCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text(german,
-                style: const TextStyle(
-                    fontStyle: FontStyle.italic, fontSize: 14)),
+            Text(
+              german,
+              style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 14),
+            ),
             const SizedBox(height: 4),
             Text(
               english,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontSize: 12),
             ),
           ],
         ),
@@ -737,12 +797,11 @@ class _BakerCharacterCard extends StatelessWidget {
   final _BakerMood mood;
   final String cue;
 
-  const _BakerCharacterCard({
-    required this.mood,
-    required this.cue,
-  });
+  const _BakerCharacterCard({required this.mood, required this.cue});
 
-  (String emoji, Color color, String title) _visualForMood(BuildContext context) {
+  (String emoji, Color color, String title) _visualForMood(
+    BuildContext context,
+  ) {
     switch (mood) {
       case _BakerMood.welcoming:
         return ('👨‍🍳', Colors.brown, 'Baker: Welcoming');
@@ -827,9 +886,9 @@ class _BakerCharacterCard extends StatelessWidget {
                     cue,
                     key: ValueKey<String>(cue),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.black87,
-                          height: 1.2,
-                        ),
+                      color: Colors.black87,
+                      height: 1.2,
+                    ),
                   ),
                 ),
               ],
@@ -858,7 +917,10 @@ class _BudgetCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [scheme.primaryContainer.withValues(alpha: 0.45), scheme.surface],
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.45),
+            scheme.surface,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -869,7 +931,9 @@ class _BudgetCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: (overBudget ? scheme.error : scheme.primary).withValues(alpha: 0.14),
+            color: (overBudget ? scheme.error : scheme.primary).withValues(
+              alpha: 0.14,
+            ),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -881,11 +945,12 @@ class _BudgetCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('Budget',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelMedium
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'Budget',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -893,12 +958,14 @@ class _BudgetCard extends StatelessWidget {
                   color: scheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: Text('EUR',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: scheme.primary,
-                    )),
+                child: Text(
+                  'EUR',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.primary,
+                  ),
+                ),
               ),
             ],
           ),
@@ -916,14 +983,16 @@ class _BudgetCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text('EUR ${spent.toStringAsFixed(2)} / EUR ${budget.toStringAsFixed(2)}',
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            'EUR ${spent.toStringAsFixed(2)} / EUR ${budget.toStringAsFixed(2)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           Text(
             'EUR ${remaining.toStringAsFixed(2)} left',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: remaining > 0 ? scheme.primary : scheme.error,
-                  fontWeight: FontWeight.bold,
-                ),
+              color: remaining > 0 ? scheme.primary : scheme.error,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -935,10 +1004,7 @@ class _ShoppingBag extends StatelessWidget {
   final List<String> items;
   final AnimationController controller;
 
-  const _ShoppingBag({
-    required this.items,
-    required this.controller,
-  });
+  const _ShoppingBag({required this.items, required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -947,9 +1013,10 @@ class _ShoppingBag extends StatelessWidget {
     final remaining = items.length - itemChips.length;
 
     return ScaleTransition(
-      scale: Tween<double>(begin: 0.95, end: 1.05).animate(
-        CurvedAnimation(parent: controller, curve: Curves.easeInOut),
-      ),
+      scale: Tween<double>(
+        begin: 0.95,
+        end: 1.05,
+      ).animate(CurvedAnimation(parent: controller, curve: Curves.easeInOut)),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -964,7 +1031,10 @@ class _ShoppingBag extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: scheme.primaryContainer,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: scheme.primary.withValues(alpha: 0.5), width: 2),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
                 ),
               ),
             ),
@@ -973,12 +1043,18 @@ class _ShoppingBag extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 16, 12, 10),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [scheme.primaryContainer.withValues(alpha: 0.68), scheme.surface],
+                colors: [
+                  scheme.primaryContainer.withValues(alpha: 0.68),
+                  scheme.surface,
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: scheme.primary.withValues(alpha: 0.42), width: 2),
+              border: Border.all(
+                color: scheme.primary.withValues(alpha: 0.42),
+                width: 2,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: scheme.primary.withValues(alpha: 0.18),
@@ -1002,14 +1078,16 @@ class _ShoppingBag extends StatelessWidget {
                     Text(
                       'My Bag',
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: scheme.primary,
-                          ),
+                        fontWeight: FontWeight.w700,
+                        color: scheme.primary,
+                      ),
                     ),
                     const Spacer(),
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: scheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(999),
@@ -1017,9 +1095,9 @@ class _ShoppingBag extends StatelessWidget {
                       child: Text(
                         '${items.length}',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.primary,
-                            ),
+                          fontWeight: FontWeight.w700,
+                          color: scheme.primary,
+                        ),
                       ),
                     ),
                   ],
@@ -1029,8 +1107,8 @@ class _ShoppingBag extends StatelessWidget {
                   Text(
                     'No items yet. Start ordering!',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                      color: scheme.onSurfaceVariant,
+                    ),
                   )
                 else ...[
                   Wrap(
@@ -1038,7 +1116,8 @@ class _ShoppingBag extends StatelessWidget {
                     runSpacing: 6,
                     children: [
                       ...itemChips.map((item) => _BagItemChip(label: item)),
-                      if (remaining > 0) _BagItemChip(label: '+$remaining more'),
+                      if (remaining > 0)
+                        _BagItemChip(label: '+$remaining more'),
                     ],
                   ),
                 ],
@@ -1069,9 +1148,9 @@ class _BagItemChip extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: scheme.onSurface,
-            ),
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
       ),
     );
   }
@@ -1085,14 +1164,15 @@ class _TransactionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isAccepted = transaction.dealAccepted || transaction.action == 'accept';
+    final isAccepted =
+        transaction.dealAccepted || transaction.action == 'accept';
     final isCounter = transaction.action == 'counter_offer';
     final isRejected = transaction.action == 'reject';
     final tone = isAccepted
-      ? const Color(0xFF16A34A)
+        ? const Color(0xFF16A34A)
         : (isCounter
-        ? scheme.primary
-        : (isRejected ? scheme.error : scheme.secondary));
+              ? scheme.primary
+              : (isRejected ? scheme.error : scheme.secondary));
 
     return Container(
       padding: const EdgeInsets.all(13),
@@ -1121,8 +1201,10 @@ class _TransactionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('Baker',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text(
+                'Baker',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1145,32 +1227,34 @@ class _TransactionCard extends StatelessWidget {
           if (transaction.item.isNotEmpty)
             Text(
               '${transaction.item} - EUR ${transaction.itemPrice.toStringAsFixed(2)} x ${transaction.quantity}',
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 13),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           if (transaction.item.isNotEmpty) const SizedBox(height: 4),
           Text(
             transaction.shopkeeperResponse,
-            style: const TextStyle(
-                fontStyle: FontStyle.italic, fontSize: 14),
+            style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 14),
           ),
           const SizedBox(height: 4),
           Text(
             transaction.englishTranslation,
             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
           ),
-          if (transaction.totalPrice > 0 || (transaction.itemPrice > 0 && transaction.quantity > 0)) ...[
-              const SizedBox(height: 8),
-              Text(
-                transaction.dealAccepted
-                    ? 'Deal: EUR ${(transaction.itemPrice * transaction.quantity).toStringAsFixed(2)}'
-                    : 'Offer: EUR ${transaction.totalPrice > 0 ? transaction.totalPrice.toStringAsFixed(2) : (transaction.itemPrice * transaction.quantity).toStringAsFixed(2)}',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: transaction.dealAccepted ? const Color(0xFF16A34A) : scheme.primary,
-                    fontSize: 13),
+          if (transaction.totalPrice > 0 ||
+              (transaction.itemPrice > 0 && transaction.quantity > 0)) ...[
+            const SizedBox(height: 8),
+            Text(
+              transaction.dealAccepted
+                  ? 'Deal: EUR ${(transaction.itemPrice * transaction.quantity).toStringAsFixed(2)}'
+                  : 'Offer: EUR ${transaction.totalPrice > 0 ? transaction.totalPrice.toStringAsFixed(2) : (transaction.itemPrice * transaction.quantity).toStringAsFixed(2)}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: transaction.dealAccepted
+                    ? const Color(0xFF16A34A)
+                    : scheme.primary,
+                fontSize: 13,
               ),
-            ],
+            ),
+          ],
         ],
       ),
     );
@@ -1179,7 +1263,7 @@ class _TransactionCard extends StatelessWidget {
 
 class _Confetti extends AnimatedWidget {
   const _Confetti({required AnimationController controller})
-      : super(listenable: controller);
+    : super(listenable: controller);
 
   @override
   Widget build(BuildContext context) {
@@ -1256,7 +1340,11 @@ class _HintStrip extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.lightbulb_outline, size: 14, color: scheme.primary),
+                  Icon(
+                    Icons.lightbulb_outline,
+                    size: 14,
+                    color: scheme.primary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Try saying',
@@ -1269,7 +1357,11 @@ class _HintStrip extends StatelessWidget {
                   const Spacer(),
                   GestureDetector(
                     onTap: onDismiss,
-                    child: const Icon(Icons.close, size: 14, color: Color(0xFF9CA3AF)),
+                    child: const Icon(
+                      Icons.close,
+                      size: 14,
+                      color: Color(0xFF9CA3AF),
+                    ),
                   ),
                 ],
               ),
@@ -1301,10 +1393,18 @@ class _HintStrip extends StatelessWidget {
                             ),
                           ],
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         visualDensity: VisualDensity.compact,
-                        backgroundColor: scheme.primaryContainer.withValues(alpha: 0.4),
-                        side: BorderSide(color: scheme.primary.withValues(alpha: 0.3), width: 1),
+                        backgroundColor: scheme.primaryContainer.withValues(
+                          alpha: 0.4,
+                        ),
+                        side: BorderSide(
+                          color: scheme.primary.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
                         onPressed: () => onHintTap(hint),
                       ),
                     );
@@ -1361,12 +1461,18 @@ class _PhraseRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(de,
-              style: const TextStyle(
-                  fontStyle: FontStyle.italic, fontWeight: FontWeight.w600)),
+          Text(
+            de,
+            style: const TextStyle(
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           Text(
             en,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontSize: 12),
           ),
         ],
       ),

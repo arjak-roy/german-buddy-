@@ -22,9 +22,9 @@ class FirebaseAuthRepository implements AuthRepository {
     FirebaseAuth? firebaseAuth,
     FirebaseFirestore? firestore,
     GoogleSignIn? googleSignIn,
-  })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance,
-        _googleSignIn = googleSignIn ?? _buildGoogleSignIn();
+  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _googleSignIn = googleSignIn ?? _buildGoogleSignIn();
 
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
@@ -41,13 +41,11 @@ class FirebaseAuthRepository implements AuthRepository {
     const configuredServerClientId = String.fromEnvironment(
       'GOOGLE_SERVER_CLIENT_ID',
     );
-    final serverClientId =
-        configuredServerClientId.trim().isEmpty ? null : configuredServerClientId;
+    final serverClientId = configuredServerClientId.trim().isEmpty
+        ? null
+        : configuredServerClientId;
 
-    return GoogleSignIn(
-      clientId: clientId,
-      serverClientId: serverClientId,
-    );
+    return GoogleSignIn(clientId: clientId, serverClientId: serverClientId);
   }
 
   @override
@@ -142,8 +140,9 @@ class FirebaseAuthRepository implements AuthRepository {
     final docRef = _firestore.collection('users').doc(user.uid);
     final now = FieldValue.serverTimestamp();
 
-    await docRef.set(
-      {
+    await _firestore.runTransaction((transaction) async {
+      final existing = await transaction.get(docRef);
+      final data = {
         'uid': user.uid,
         'email': user.email,
         'displayName': user.displayName,
@@ -153,10 +152,14 @@ class FirebaseAuthRepository implements AuthRepository {
             .toList(),
         'updatedAt': now,
         'lastLoginAt': now,
-        'createdAt': now,
-      },
-      SetOptions(merge: true),
-    );
+      };
+
+      if (!existing.exists || existing.data()?['createdAt'] == null) {
+        data['createdAt'] = now;
+      }
+
+      transaction.set(docRef, data, SetOptions(merge: true));
+    });
   }
 
   AppUser? _mapUser(User? user) {
@@ -165,6 +168,7 @@ class FirebaseAuthRepository implements AuthRepository {
       id: user.uid,
       email: user.email,
       displayName: user.displayName,
+      languageLevel: 'B1',
     );
   }
 
@@ -218,7 +222,8 @@ class FirebaseAuthRepository implements AuthRepository {
         return 'No network connection. Check your internet and retry.';
       }
 
-      final hasApi10 = message.contains('apiexception: 10') ||
+      final hasApi10 =
+          message.contains('apiexception: 10') ||
           message.contains('10:') ||
           message.contains('developer_error');
       if (hasApi10) {

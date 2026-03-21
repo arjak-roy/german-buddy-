@@ -15,6 +15,16 @@ import '../../../../providers/app_providers.dart';
 /// animation is used on the mic button so pushing this route from the
 /// home page appears seamless.
 class BuddyScreen extends ConsumerStatefulWidget {
+  // Static TTS stopper for tab navigation
+  static FlutterTts? _staticTts;
+  static Future<void> stopTtsIfActive() async {
+    if (_staticTts != null) {
+      try {
+        await _staticTts!.stop();
+      } catch (_) {}
+    }
+  }
+
   /// When used as a tab page inside the home scaffold we don't want to
   /// create another [Scaffold] (nested scaffolds cause layout issues). In
   /// that case set [embedded] to true and only the inner content is
@@ -29,10 +39,12 @@ class BuddyScreen extends ConsumerStatefulWidget {
   ConsumerState<BuddyScreen> createState() => _BuddyScreenState();
 }
 
-class _BuddyScreenState extends ConsumerState<BuddyScreen> {
+class _BuddyScreenState extends ConsumerState<BuddyScreen>
+    with WidgetsBindingObserver {
   late final ScrollController _scrollController;
   late final FlutterTts _tts;
   late final AudioPlayer _nativeAudioPlayer;
+  late final ValueNotifier<Brightness> _brightnessNotifier;
   int _lastCount = -1;
   int _lastPlayedAudioToken = 0;
   bool _didInitialBottomJump = false;
@@ -57,18 +69,19 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _brightnessNotifier = ValueNotifier(
+      WidgetsBinding.instance.window.platformBrightness,
+    );
     _scrollController = ScrollController();
     _nativeAudioPlayer = AudioPlayer();
     _tts = FlutterTts();
+    BuddyScreen._staticTts = _tts;
     _tts.setLanguage('de-DE'); // fallback; overridden by _applyVoiceSettings
     _tts.setPitch(1.0);
     _tts.setSpeechRate(0.45);
     _tts.awaitSpeakCompletion(false);
     WidgetsBinding.instance.addPostFrameCallback((_) => _applyVoiceSettings());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(chatProviderNotifier).prepareBuddyLiveSession();
-    });
   }
 
   Future<void> _applyVoiceSettings() async {
@@ -81,12 +94,23 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(ref.read(chatProviderNotifier).cancelBuddyVoiceTurn());
     _tts.stop();
     _nativeAudioPlayer.stop();
     _nativeAudioPlayer.dispose();
     _scrollController.dispose();
+    if (BuddyScreen._staticTts == _tts) {
+      BuddyScreen._staticTts = null;
+    }
     super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    super.didChangePlatformBrightness();
+    _brightnessNotifier.value =
+        WidgetsBinding.instance.window.platformBrightness;
   }
 
   Future<void> _playLatestAiMessage(List entries, ChatProvider chat) async {
@@ -169,9 +193,29 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
     return out.takeBytes();
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool isDark) {
     final chat = ref.watch(chatProviderNotifier);
     final entries = chat.messages;
+
+    if (chat.isBuddyPreparing && !chat.isBuddyLiveReady) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2.8),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Connecting Buddy Live...',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+      );
+    }
 
     if (chat.buddyInterruptToken > _lastInterruptToken) {
       _lastInterruptToken = chat.buddyInterruptToken;
@@ -247,6 +291,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
                     text: e.text,
                     translated: e.translated,
                     isUser: e.isUser,
+                    isDark: isDark,
                   );
                 }
                 // loading placeholder bubble
@@ -281,6 +326,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
                   text: e.text,
                   translated: e.translated,
                   isUser: e.isUser,
+                  isDark: isDark,
                 );
               },
             ),
@@ -292,23 +338,34 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     if (widget.embedded) {
-      return Container(color: Colors.grey.shade50, child: _buildContent());
+      final isDark = _brightnessNotifier.value == Brightness.dark;
+      return Container(
+        color: colorScheme.background,
+        child: _buildContent(isDark),
+      );
     }
 
-    return PopScope(
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) {
-          _tts.stop();
-          _nativeAudioPlayer.stop();
-        }
+    return ValueListenableBuilder<Brightness>(
+      valueListenable: _brightnessNotifier,
+      builder: (context, brightness, _) {
+        final isDark = brightness == Brightness.dark;
+        return PopScope(
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) {
+              _tts.stop();
+              _nativeAudioPlayer.stop();
+            }
+          },
+          child: Scaffold(
+            backgroundColor: colorScheme.background,
+            appBar: const BuddyAppBar(),
+            body: _buildContent(isDark),
+            bottomNavigationBar: const BottomMic(),
+          ),
+        );
       },
-      child: Scaffold(
-        backgroundColor: Colors.grey.shade50,
-        appBar: const BuddyAppBar(),
-        body: _buildContent(),
-        bottomNavigationBar: const BottomMic(),
-      ),
     );
   }
 }

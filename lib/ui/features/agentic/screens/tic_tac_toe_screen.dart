@@ -52,7 +52,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
       const _TicTacToeMessage(
         text:
             'Welcome. Say top left, center, unten rechts, or reset to play Tic-Tac-Toe.',
-        translated: 'Welcome. Say top left, center, bottom right, or reset to play Tic-Tac-Toe.',
+        translated:
+            'Welcome. Say top left, center, bottom right, or reset to play Tic-Tac-Toe.',
         isUser: false,
       ),
     );
@@ -82,7 +83,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
         _isGermanUi(context)
             ? 'Einen Moment, ich verarbeite noch den letzten Zug.'
             : 'One moment, I am still processing the previous turn.',
-        englishTranslation: 'One moment, I am still processing the previous turn.',
+        englishTranslation:
+            'One moment, I am still processing the previous turn.',
       );
       return;
     }
@@ -134,8 +136,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
         plan.spokenResponse.isNotEmpty
             ? plan.spokenResponse
             : (_isGermanUi(context)
-                ? 'Sage zum Beispiel oben links, mitte, unten rechts oder reset.'
-                : 'Say for example top left, center, bottom right, or reset.'),
+                  ? 'Sage zum Beispiel oben links, mitte, unten rechts oder reset.'
+                  : 'Say for example top left, center, bottom right, or reset.'),
         englishTranslation: plan.englishTranslation.isNotEmpty
             ? plan.englishTranslation
             : 'Say for example top left, center, bottom right, or reset.',
@@ -148,8 +150,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
         plan.spokenResponse.isNotEmpty
             ? plan.spokenResponse
             : (_isGermanUi(context)
-                ? 'Ich habe den Zug nicht verstanden. Bitte buchstabiere es korrekt.'
-                : 'I did not understand that move. Please spell it correctly.'),
+                  ? 'Ich habe den Zug nicht verstanden. Bitte buchstabiere es korrekt.'
+                  : 'I did not understand that move. Please spell it correctly.'),
         englishTranslation: plan.englishTranslation.isNotEmpty
             ? plan.englishTranslation
             : 'I did not understand that move. Please spell it correctly.',
@@ -173,8 +175,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
         plan.spokenResponse.isNotEmpty
             ? plan.spokenResponse
             : (_isGermanUi(context)
-                ? 'Bitte nenne ein freies Feld von eins bis neun.'
-                : 'Please name a free square from one to nine.'),
+                  ? 'Bitte nenne ein freies Feld von eins bis neun.'
+                  : 'Please name a free square from one to nine.'),
         englishTranslation: plan.englishTranslation.isNotEmpty
             ? plan.englishTranslation
             : 'Please name a free square from one to nine.',
@@ -219,8 +221,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
       plan.spokenResponse.isNotEmpty
           ? plan.spokenResponse
           : (_isGermanUi(context)
-              ? 'Ich habe meinen Zug gemacht. Du bist dran.'
-              : 'I made my move. Your turn.'),
+                ? 'Ich habe meinen Zug gemacht. Du bist dran.'
+                : 'I made my move. Your turn.'),
       englishTranslation: plan.englishTranslation.isNotEmpty
           ? plan.englishTranslation
           : 'I made my move. Your turn.',
@@ -235,7 +237,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
         _isGermanUi(context)
             ? 'Einen Moment, ich verarbeite noch den letzten Zug.'
             : 'One moment, I am still processing the previous turn.',
-        englishTranslation: 'One moment, I am still processing the previous turn.',
+        englishTranslation:
+            'One moment, I am still processing the previous turn.',
       );
       return;
     }
@@ -350,9 +353,7 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
     return german ? germanPhrases[index] : english[index];
   }
 
-  void _finishGame(
-    String winner,
-  ) {
+  void _finishGame(String winner) {
     final german = winner == _playerMark
         ? 'Du gewinnst. Sage reset für ein neues Spiel.'
         : 'Ich gewinne. Sage reset für ein neues Spiel.';
@@ -391,10 +392,7 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
     );
   }
 
-  void _resetGame({
-    String? customStatus,
-    String? customEnglishTranslation,
-  }) {
+  void _resetGame({String? customStatus, String? customEnglishTranslation}) {
     setState(() {
       for (var index = 0; index < _board.length; index++) {
         _board[index] = '';
@@ -404,8 +402,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
       _status = customStatus?.isNotEmpty == true
           ? customStatus!
           : (_isGermanUi(context)
-              ? 'Neues Spiel. Du beginnst als X.'
-              : 'New game. You start as X.');
+                ? 'Neues Spiel. Du beginnst als X.'
+                : 'New game. You start as X.');
     });
 
     _respond(
@@ -493,7 +491,8 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
             tooltip: showDebug
                 ? 'Hide STT debug panel'
                 : 'Show STT debug panel',
-            onPressed: () => ref.read(speechProviderNotifier).toggleDebugPanel(),
+            onPressed: () =>
+                ref.read(speechProviderNotifier).toggleDebugPanel(),
           ),
           IconButton(
             onPressed: () => _resetGame(),
@@ -509,58 +508,64 @@ class _TicTacToeScreenState extends ConsumerState<TicTacToeScreen> {
               children: [
                 Expanded(
                   child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                children: [
-                  _StatusCard(
-                    title: isGerman ? 'Sprich deinen Zug' : 'Speak your move',
-                    status: _status,
-                    winner: _winner,
-                    isGerman: isGerman,
-                  ),
-                  const SizedBox(height: 16),
-                  _Board(
-                    board: _board,
-                    onTap: _handleBoardTap,
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                     children: [
-                      ...List<Widget>.generate(9, (index) {
-                        final phrase = _squarePhrase(index, german: isGerman);
-                        return _HintChip(
-                          label: '${index + 1}. $phrase',
-                          onTap: isGerman
-                              ? () => _speakGermanHint('Feld ${index + 1}, $phrase')
-                              : null,
-                        );
-                      }),
-                      _HintChip(
-                        label: isGerman ? 'reset' : 'reset',
-                        onTap: isGerman
-                            ? () => _speakGermanHint('reset')
-                            : null,
+                      _StatusCard(
+                        title: isGerman
+                            ? 'Sprich deinen Zug'
+                            : 'Speak your move',
+                        status: _status,
+                        winner: _winner,
+                        isGerman: isGerman,
+                      ),
+                      const SizedBox(height: 16),
+                      _Board(board: _board, onTap: _handleBoardTap),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ...List<Widget>.generate(9, (index) {
+                            final phrase = _squarePhrase(
+                              index,
+                              german: isGerman,
+                            );
+                            return _HintChip(
+                              label: '${index + 1}. $phrase',
+                              onTap: isGerman
+                                  ? () => _speakGermanHint(
+                                      'Feld ${index + 1}, $phrase',
+                                    )
+                                  : null,
+                            );
+                          }),
+                          _HintChip(
+                            label: isGerman ? 'reset' : 'reset',
+                            onTap: isGerman
+                                ? () => _speakGermanHint('reset')
+                                : null,
+                          ),
+                        ],
+                      ),
+                      if (_isResolvingTurn) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          isGerman
+                              ? 'Gemini denkt...'
+                              : 'Gemini is thinking...',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      Text(
+                        isGerman ? 'Spielverlauf' : 'Voice log',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      ..._messages.reversed.map(
+                        (message) => _VoiceLogBubble(message: message),
                       ),
                     ],
-                  ),
-                  if (_isResolvingTurn) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      isGerman ? 'Gemini denkt...' : 'Gemini is thinking...',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  Text(
-                    isGerman ? 'Spielverlauf' : 'Voice log',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  ..._messages.reversed.map(
-                    (message) => _VoiceLogBubble(message: message),
-                  ),
-                ],
                   ),
                 ),
                 SpeechActionBar(

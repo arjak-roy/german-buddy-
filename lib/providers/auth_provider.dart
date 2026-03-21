@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/app_user.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/firebase_auth_repository.dart';
+import 'profile_provider.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return FirebaseAuthRepository();
@@ -13,9 +14,8 @@ final authSessionProvider = StreamProvider<AppUser?>((ref) {
   return repository.authStateChanges;
 });
 
-final authControllerProvider = NotifierProvider<AuthController, AsyncValue<void>>(
-  AuthController.new,
-);
+final authControllerProvider =
+    NotifierProvider<AuthController, AsyncValue<void>>(AuthController.new);
 
 class AuthController extends Notifier<AsyncValue<void>> {
   @override
@@ -23,10 +23,7 @@ class AuthController extends Notifier<AsyncValue<void>> {
     return const AsyncValue.data(null);
   }
 
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signIn({required String email, required String password}) async {
     final repository = ref.read(authRepositoryProvider);
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() {
@@ -37,10 +34,7 @@ class AuthController extends Notifier<AsyncValue<void>> {
     });
   }
 
-  Future<void> signUp({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signUp({required String email, required String password}) async {
     final repository = ref.read(authRepositoryProvider);
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() {
@@ -69,5 +63,16 @@ class AuthController extends Notifier<AsyncValue<void>> {
     final repository = ref.read(authRepositoryProvider);
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(repository.signOut);
+  }
+
+  Future<void> setLanguageLevel(String languageLevel) async {
+    final user = ref.read(authRepositoryProvider).currentUser;
+    if (user == null) return;
+    final profileRepo = ref.read(userProfileRepositoryProvider);
+
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() {
+      return profileRepo.setLanguageLevel(user.id, languageLevel);
+    });
   }
 }

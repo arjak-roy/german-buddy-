@@ -7,7 +7,8 @@ class ListeningExerciseScreen extends StatefulWidget {
   const ListeningExerciseScreen({super.key, required this.item});
 
   @override
-  State<ListeningExerciseScreen> createState() => _ListeningExerciseScreenState();
+  State<ListeningExerciseScreen> createState() =>
+      _ListeningExerciseScreenState();
 }
 
 class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
@@ -103,9 +104,9 @@ class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
     } catch (e) {
       debugPrint('ListeningAudio: error $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Audio failed to play: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Audio failed to play: $e')));
     }
   }
 
@@ -145,15 +146,22 @@ class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
           child: Column(
             children: [
               Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Listening Exercise', style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                        'Listening Exercise',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                       const SizedBox(height: 8),
-                      Text('Follow the steps to listen, answer, and get your results.'),
+                      Text(
+                        'Follow the steps to listen, answer, and get your results.',
+                      ),
                     ],
                   ),
                 ),
@@ -167,7 +175,11 @@ class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
                 onStepTapped: (s) {
                   if (s > 0 && !_hasCompletedAudioOnce) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Finish the full audio before continuing.')),
+                      const SnackBar(
+                        content: Text(
+                          'Finish the full audio before continuing.',
+                        ),
+                      ),
                     );
                     return;
                   }
@@ -179,32 +191,47 @@ class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
                     child: Row(
                       children: [
                         if (_currentStep > 0)
-                          TextButton(onPressed: _goToBack, child: const Text('Back')),
+                          TextButton(
+                            onPressed: _goToBack,
+                            child: const Text('Back'),
+                          ),
                         const Spacer(),
                         ElevatedButton(
-                          onPressed: _currentStep == 0 && !_hasCompletedAudioOnce
+                          onPressed:
+                              _currentStep == 0 && !_hasCompletedAudioOnce
                               ? null
                               : () {
-                            if (_currentStep == 1) {
-                              final allAnswered = _selected.every((e) => e != null);
-                              if (!allAnswered) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Please answer all questions.')),
-                                );
-                                return;
-                              }
-                            }
-                            if (_currentStep == 2) {
-                              setState(() {
-                                _selected = List<int?>.filled(_questions.length, null);
-                                _currentStep = 0;
-                                _hasCompletedAudioOnce = false;
-                                _maxListenedPosition = Duration.zero;
-                              });
-                              return;
-                            }
-                            _goToNext();
-                          },
+                                  if (_currentStep == 1) {
+                                    final allAnswered = _selected.every(
+                                      (e) => e != null,
+                                    );
+                                    if (!allAnswered) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Please answer all questions.',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                  }
+                                  if (_currentStep == 2) {
+                                    setState(() {
+                                      _selected = List<int?>.filled(
+                                        _questions.length,
+                                        null,
+                                      );
+                                      _currentStep = 0;
+                                      _hasCompletedAudioOnce = false;
+                                      _maxListenedPosition = Duration.zero;
+                                    });
+                                    return;
+                                  }
+                                  _goToNext();
+                                },
                           child: Text(_currentStep == 2 ? 'Restart' : 'Next'),
                         ),
                       ],
@@ -215,41 +242,58 @@ class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
                   Step(
                     title: const Text('Play German Audio'),
                     isActive: _currentStep >= 0,
-                    state: _currentStep > 0 ? StepState.complete : StepState.indexed,
+                    state: _currentStep > 0
+                        ? StepState.complete
+                        : StepState.indexed,
                     content: Column(
                       children: [
                         Text('Tap play to listen to the native German audio.'),
                         const SizedBox(height: 12),
                         IconButton(
                           iconSize: 64,
-                          icon: Icon(_isPlaying ? Icons.pause_circle : Icons.play_circle),
+                          icon: Icon(
+                            _isPlaying ? Icons.pause_circle : Icons.play_circle,
+                          ),
                           onPressed: _playPause,
                         ),
                         Slider(
                           min: 0,
-                          max: _duration.inSeconds > 0 ? _duration.inSeconds.toDouble() : 1,
-                          value: _position.inSeconds.clamp(0, _duration.inSeconds).toDouble(),
+                          max: _duration.inSeconds > 0
+                              ? _duration.inSeconds.toDouble()
+                              : 1,
+                          value: _position.inSeconds
+                              .clamp(0, _duration.inSeconds)
+                              .toDouble(),
                           onChanged: (v) async {
                             final pos = Duration(seconds: v.toInt());
-                            if (!_hasCompletedAudioOnce && pos > _maxListenedPosition) {
+                            if (!_hasCompletedAudioOnce &&
+                                pos > _maxListenedPosition) {
                               await _audioPlayer.seek(_maxListenedPosition);
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('You can\'t skip ahead before finishing the audio once.')),
+                                const SnackBar(
+                                  content: Text(
+                                    'You can\'t skip ahead before finishing the audio once.',
+                                  ),
+                                ),
                               );
                               return;
                             }
                             await _audioPlayer.seek(pos);
                           },
                         ),
-                        Text('${_position.toString().split('.').first} / ${_duration.toString().split('.').first}'),
+                        Text(
+                          '${_position.toString().split('.').first} / ${_duration.toString().split('.').first}',
+                        ),
                       ],
                     ),
                   ),
                   Step(
                     title: const Text('Answer Questions'),
                     isActive: _currentStep >= 1,
-                    state: _currentStep > 1 ? StepState.complete : StepState.indexed,
+                    state: _currentStep > 1
+                        ? StepState.complete
+                        : StepState.indexed,
                     content: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: List<Widget>.generate(_questions.length, (i) {
@@ -293,29 +337,49 @@ class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
                     content: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('You scored $score / $total', style: Theme.of(context).textTheme.headlineSmall),
+                        Text(
+                          'You scored $score / $total',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
                         const SizedBox(height: 12),
                         Card(
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: List<Widget>.generate(_questions.length, (i) {
+                              children: List<Widget>.generate(_questions.length, (
+                                i,
+                              ) {
                                 final q = _questions[i];
                                 final options = q['options'] as List<String>;
                                 final correct = q['correct'] as int;
                                 final selected = _selected[i];
                                 final correctText = options[correct];
-                                final selectedText = selected == null ? '—' : options[selected];
+                                final selectedText = selected == null
+                                    ? '—'
+                                    : options[selected];
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text('Q${i + 1}: ${q['question'] as String}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      Text(
+                                        'Q${i + 1}: ${q['question'] as String}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                       const SizedBox(height: 6),
                                       Text('Your answer: $selectedText'),
-                                      Text('Correct: $correctText', style: const TextStyle(color: Colors.green)),
+                                      Text(
+                                        'Correct: $correctText',
+                                        style: const TextStyle(
+                                          color: Colors.green,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 );
@@ -327,7 +391,10 @@ class _ListeningExerciseScreenState extends State<ListeningExerciseScreen> {
                         ElevatedButton(
                           onPressed: () {
                             setState(() {
-                              _selected = List<int?>.filled(_questions.length, null);
+                              _selected = List<int?>.filled(
+                                _questions.length,
+                                null,
+                              );
                               _currentStep = 0;
                             });
                           },

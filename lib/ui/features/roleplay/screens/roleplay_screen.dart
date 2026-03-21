@@ -11,9 +11,7 @@ class RoleplayScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Roleplay Scenarios'),
-      ),
+      appBar: AppBar(title: const Text('Roleplay Scenarios')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 16),

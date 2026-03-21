@@ -24,7 +24,10 @@ class AppTheme {
       bodyLarge: TextStyle(color: scheme.onSurface),
       bodyMedium: TextStyle(height: 1.25, color: scheme.onSurface),
       bodySmall: TextStyle(color: scheme.onSurfaceVariant),
-      labelLarge: TextStyle(fontWeight: FontWeight.w600, color: scheme.onSurface),
+      labelLarge: TextStyle(
+        fontWeight: FontWeight.w600,
+        color: scheme.onSurface,
+      ),
       labelMedium: TextStyle(color: scheme.onSurfaceVariant),
     );
   }
@@ -76,8 +79,9 @@ class AppTheme {
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         return TextStyle(
           fontSize: 12,
-          fontWeight:
-              states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w500,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w600
+              : FontWeight.w500,
           color: states.contains(WidgetState.selected)
               ? const Color(0xFF1F2937)
               : const Color(0xFF6B7280),
@@ -139,8 +143,9 @@ class AppTheme {
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         return TextStyle(
           fontSize: 12,
-          fontWeight:
-              states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w500,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w600
+              : FontWeight.w500,
           color: states.contains(WidgetState.selected)
               ? Colors.white
               : const Color(0xFF94A3B8),

@@ -3,13 +3,61 @@ import '../models/pronunciation_item.dart';
 import 'pronunciation_lesson_screen.dart';
 // import removed: '../../listening/screens/listening_catalogue_screen.dart';
 
-class PronunciationScreen extends StatelessWidget {
+class PronunciationScreen extends StatefulWidget {
   static const _panelTitle = Color(0xFF0F172A);
   static const _panelBody = Color(0xFF334155);
 
   final bool embedded;
 
   const PronunciationScreen({super.key, this.embedded = false});
+
+  @override
+  State<PronunciationScreen> createState() => _PronunciationScreenState();
+}
+
+class _PronunciationScreenState extends State<PronunciationScreen> {
+  static const _panelTitle = Color(0xFF0F172A);
+  static const _panelBody = Color(0xFF334155);
+
+  late TextEditingController _searchController;
+  late List<PronunciationItem> _filteredItems;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _filteredItems = pronunciationItems.toList();
+    _searchController.addListener(_performSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _performSearch() {
+    final query = _searchController.text.toLowerCase().trim();
+
+    if (query.isEmpty) {
+      setState(() {
+        _filteredItems = pronunciationItems.toList();
+      });
+      return;
+    }
+
+    setState(() {
+      _filteredItems = pronunciationItems.where((item) {
+        final german = item.german.toLowerCase();
+        final english = item.english.toLowerCase();
+        final phonetic = item.phonetic.toLowerCase();
+
+        return german.contains(query) ||
+            english.contains(query) ||
+            phonetic.contains(query);
+      }).toList();
+    });
+  }
 
   void _openLesson(BuildContext context, PronunciationItem item) {
     Navigator.of(context).push(
@@ -44,10 +92,11 @@ class PronunciationScreen extends StatelessWidget {
                     children: [
                       Text(
                         'Pronunciation Lab',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: _panelTitle,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: _panelTitle,
+                            ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -60,34 +109,112 @@ class PronunciationScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                // ...existing code...
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: '🔍 Search German, English, or phonetic...',
+                    hintStyle: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 14,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: Colors.grey.shade600,
+                      size: 20,
+                    ),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                ),
               ],
             ),
           ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          sliver: SliverGrid(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = pronunciationItems[index];
-              return _PronunciationGridCard(
-                item: item,
-                index: index,
-                onTap: () => _openLesson(context, item),
-              );
-            }, childCount: pronunciationItems.length),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 260,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              mainAxisExtent: 250,
+        if (_filteredItems.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.search_off_rounded,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No words found',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Try searching with German word, English translation, or phonetic spelling',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+            sliver: SliverGrid(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = _filteredItems[index];
+                final originalIndex = pronunciationItems.indexOf(item);
+                return _PronunciationGridCard(
+                  item: item,
+                  index: originalIndex,
+                  onTap: () => _openLesson(context, item),
+                );
+              }, childCount: _filteredItems.length),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 260,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: 250,
+              ),
             ),
           ),
-        ),
       ],
     );
 
-    if (embedded) {
+    if (widget.embedded) {
       return content;
     }
 

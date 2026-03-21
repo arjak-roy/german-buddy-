@@ -26,7 +26,10 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
               children: [
                 const Text(
                   'Language Buddy',
-                  style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.2),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 DecoratedBox(
@@ -35,7 +38,10 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     borderRadius: const BorderRadius.all(Radius.circular(999)),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
                     child: Text(
                       'v0.0.1',
                       style: TextStyle(

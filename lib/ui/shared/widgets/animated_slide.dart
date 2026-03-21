@@ -39,12 +39,7 @@ class _AnimatedSlideState extends State<AnimatedSlide>
     _animation = Tween<Offset>(
       begin: Offset(xOffset, 0),
       end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOut,
-      ),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
   }
 
   @override
@@ -57,10 +52,7 @@ class _AnimatedSlideState extends State<AnimatedSlide>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _controller,
-      child: SlideTransition(
-        position: _animation,
-        child: widget.child,
-      ),
+      child: SlideTransition(position: _animation, child: widget.child),
     );
   }
 }

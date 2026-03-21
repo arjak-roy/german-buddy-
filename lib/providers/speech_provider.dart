@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -35,6 +37,105 @@ class SpeechProvider extends ChangeNotifier {
     'bitteh': 'bitte',
   };
 
+  // Language detection keywords
+  static const Set<String> _germanKeywords = {
+    'der',
+    'die',
+    'das',
+    'und',
+    'zu',
+    'ein',
+    'eine',
+    'ich',
+    'du',
+    'er',
+    'es',
+    'wir',
+    'ihr',
+    'mein',
+    'dein',
+    'sein',
+    'unser',
+    'euer',
+    'haben',
+    'bin',
+    'bist',
+    'ist',
+    'sind',
+    'seid',
+    'danke',
+    'bitte',
+    'guten',
+    'tag',
+    'abend',
+    'morgen',
+    'nacht',
+    'hallo',
+    'wie',
+    'was',
+    'wo',
+    'wann',
+    'warum',
+    'wer',
+    'welcher',
+    'welche',
+    'welches',
+  };
+
+  static const Set<String> _englishKeywords = {
+    'the',
+    'a',
+    'an',
+    'and',
+    'or',
+    'but',
+    'in',
+    'on',
+    'at',
+    'to',
+    'for',
+    'of',
+    'with',
+    'by',
+    'from',
+    'is',
+    'are',
+    'am',
+    'be',
+    'been',
+    'being',
+    'have',
+    'has',
+    'do',
+    'does',
+    'did',
+    'will',
+    'would',
+    'could',
+    'should',
+    'may',
+    'might',
+    'must',
+    'can',
+    'hello',
+    'hi',
+    'thanks',
+    'thank',
+    'please',
+    'sorry',
+    'yes',
+    'no',
+    'okay',
+    'ok',
+    'what',
+    'which',
+    'who',
+    'when',
+    'where',
+    'why',
+    'how',
+  };
+
   bool _initialized = false;
   bool _speechReady = false;
   bool _isListening = false;
@@ -59,8 +160,16 @@ class SpeechProvider extends ChangeNotifier {
   SpeechLanguage _language = SpeechLanguage.german;
   String _germanLocaleId = 'de_DE';
   String _englishLocaleId = 'en_US';
-  final Map<String, String> _wordCorrections =
-      Map<String, String>.from(_defaultWordCorrections);
+  final Map<String, String> _wordCorrections = Map<String, String>.from(
+    _defaultWordCorrections,
+  );
+
+  // Mid-utterance language switching tracking
+  SpeechLanguage? _lastDetectedLanguage;
+  int _consecutiveWordsInDifferentLanguage = 0;
+  static const int _minConsecutiveWordsToSwitch = 2;
+  bool _isSwitchingLocale = false;
+  String _sessionTranscriptPrefix = '';
 
   bool get speechReady => _speechReady;
   bool get isListening => _isListening;
@@ -77,7 +186,8 @@ class SpeechProvider extends ChangeNotifier {
   String get activeLocaleId => isGerman ? _germanLocaleId : _englishLocaleId;
   String get lastStatus => _lastStatus;
   String? get lastError => _lastError;
-  Map<String, double> get liveWordConfidence => Map.unmodifiable(_liveWordConfidence);
+  Map<String, double> get liveWordConfidence =>
+      Map.unmodifiable(_liveWordConfidence);
 
   double? confidenceForWord(String word) {
     final normalized = _normalizeConfidenceToken(word);
@@ -199,6 +309,10 @@ class SpeechProvider extends ChangeNotifier {
     _minSoundLevel = 50000;
     _maxSoundLevel = -50000;
     _lastResultAt = DateTime.now();
+    _lastDetectedLanguage = _language;
+    _consecutiveWordsInDifferentLanguage = 0;
+    _isSwitchingLocale = false;
+    _sessionTranscriptPrefix = '';
     _sessionGen++;
     final gen = _sessionGen;
     notifyListeners();
@@ -216,7 +330,8 @@ class SpeechProvider extends ChangeNotifier {
         final words = result.recognizedWords.trim();
         if (words.isNotEmpty) {
           final transcript = _postProcessTranscript(words);
-          _recognized = transcript;
+          final combinedTranscript = _mergeWithSessionPrefix(transcript);
+          _recognized = combinedTranscript;
           _resultTick += 1;
           _lastResultAt = DateTime.now();
           if (result.hasConfidenceRating) {
@@ -224,9 +339,13 @@ class SpeechProvider extends ChangeNotifier {
             // Some engines emit 0.0 as a placeholder confidence.
             _lastConfidence = (c > 0.0 && c <= 1.0) ? c : null;
           }
-          _updateRealtimeWordConfidence(transcript, _lastConfidence);
+          _updateRealtimeWordConfidence(combinedTranscript, _lastConfidence);
+
+          // Auto-detect language from recognized text
+          _autoDetectAndSwitchLanguage(combinedTranscript);
+
           if (result.finalResult) {
-            _finalRecognized = transcript;
+            _finalRecognized = combinedTranscript;
           }
           notifyListeners();
         }
@@ -291,6 +410,10 @@ class SpeechProvider extends ChangeNotifier {
     _wordStability.clear();
     _wordLastSeenTick.clear();
     _resultTick = 0;
+    _lastDetectedLanguage = _language;
+    _consecutiveWordsInDifferentLanguage = 0;
+    _sessionTranscriptPrefix = '';
+    _isSwitchingLocale = false;
     notifyListeners();
   }
 
@@ -313,9 +436,15 @@ class SpeechProvider extends ChangeNotifier {
 
       // If engine has only utterance-level confidence, estimate per-word
       // confidence using token stability across realtime partial results.
-      final inferredWordConfidence = (0.25 + (stability * 0.65)).clamp(0.0, 1.0);
+      final inferredWordConfidence = (0.25 + (stability * 0.65)).clamp(
+        0.0,
+        1.0,
+      );
       final nextConfidence = (confidence != null && confidence > 0.0)
-          ? ((confidence * 0.7) + (inferredWordConfidence * 0.3)).clamp(0.0, 1.0)
+          ? ((confidence * 0.7) + (inferredWordConfidence * 0.3)).clamp(
+              0.0,
+              1.0,
+            )
           : inferredWordConfidence;
 
       final previous = _liveWordConfidence[token];
@@ -333,10 +462,7 @@ class SpeechProvider extends ChangeNotifier {
   }
 
   String _normalizeConfidenceToken(String token) {
-    return token
-        .toLowerCase()
-        .replaceAll(RegExp(r"[^a-z0-9äöüß]"), '')
-        .trim();
+    return token.toLowerCase().replaceAll(RegExp(r"[^a-z0-9äöüß]"), '').trim();
   }
 
   String _postProcessTranscript(String text) {
@@ -367,7 +493,8 @@ class SpeechProvider extends ChangeNotifier {
       return token.replaceFirst(core, replacement);
     }
 
-    final isBuddy = _buddyDirectVariants.contains(lowerCore) ||
+    final isBuddy =
+        _buddyDirectVariants.contains(lowerCore) ||
         _levenshtein(lowerCore, _wakeWord) <= 1;
     if (!isBuddy) return token;
 
@@ -417,9 +544,11 @@ class SpeechProvider extends ChangeNotifier {
         final deletion = dist[i - 1][j] + 1;
         final insertion = dist[i][j - 1] + 1;
         final substitution = dist[i - 1][j - 1] + cost;
-        dist[i][j] = [deletion, insertion, substitution].reduce(
-          (minValue, next) => next < minValue ? next : minValue,
-        );
+        dist[i][j] = [
+          deletion,
+          insertion,
+          substitution,
+        ].reduce((minValue, next) => next < minValue ? next : minValue);
       }
     }
 
@@ -474,5 +603,170 @@ class SpeechProvider extends ChangeNotifier {
         break;
       }
     }
+  }
+
+  String _mergeWithSessionPrefix(String currentTranscript) {
+    if (_sessionTranscriptPrefix.isEmpty) return currentTranscript;
+    if (currentTranscript.isEmpty) return _sessionTranscriptPrefix;
+    return '${_sessionTranscriptPrefix.trim()} ${currentTranscript.trim()}'
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  /// Detects language from recognized text and auto-switches if confidence exceeds threshold.
+  /// Threshold: at least 50% of recognized words (minimum 2 words) must match one language.
+  void _autoDetectAndSwitchLanguage(String text) {
+    _checkMidUtteranceLanguageSwitch(text);
+  }
+
+  /// Detects language transitions within a single utterance (mid-utterance switching).
+  /// Example: "guten morgen buddy" - switches from German to English mid-sentence.
+  void _checkMidUtteranceLanguageSwitch(String text) {
+    if (_isSwitchingLocale) return;
+
+    final tokens = text
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .map((t) => t.replaceAll(RegExp(r'[^a-z0-9äöüß]'), ''))
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    if (tokens.isEmpty) return;
+
+    // Check the last few tokens to detect if the user has switched languages
+    final recentTokens = tokens.length > 3
+        ? tokens.sublist(tokens.length - 3)
+        : tokens;
+
+    final suggestedLanguage = _detectLanguageFromTokenWindow(recentTokens);
+    if (suggestedLanguage == null) return;
+
+    // If current language is German but recent words are English (or vice versa),
+    // and we have at least the minimum consecutive words, switch languages
+    if (suggestedLanguage != _lastDetectedLanguage) {
+      _consecutiveWordsInDifferentLanguage++;
+
+      // Switch if we've detected enough consecutive words in a different language
+      if (_consecutiveWordsInDifferentLanguage >=
+          _minConsecutiveWordsToSwitch) {
+        if (suggestedLanguage != _language) {
+          if (_isListening) {
+            unawaited(_switchLanguageDuringListening(suggestedLanguage));
+          } else {
+            setLanguage(suggestedLanguage);
+          }
+        }
+        _lastDetectedLanguage = suggestedLanguage;
+        _consecutiveWordsInDifferentLanguage = 0;
+      }
+    } else {
+      // Reset counter if we're back to the detected language
+      _consecutiveWordsInDifferentLanguage = 0;
+      _lastDetectedLanguage = suggestedLanguage;
+    }
+  }
+
+  SpeechLanguage? _detectLanguageFromTokenWindow(Iterable<String> tokens) {
+    int germanScore = 0;
+    int englishScore = 0;
+
+    for (final token in tokens) {
+      if (_germanKeywords.contains(token)) {
+        germanScore++;
+      }
+      if (_englishKeywords.contains(token)) {
+        englishScore++;
+      }
+    }
+
+    if (germanScore >= 1 && germanScore > englishScore) {
+      return SpeechLanguage.german;
+    }
+    if (englishScore >= 1 && englishScore > germanScore) {
+      return SpeechLanguage.english;
+    }
+    return null;
+  }
+
+  Future<void> _switchLanguageDuringListening(
+    SpeechLanguage nextLanguage,
+  ) async {
+    if (_isSwitchingLocale || !_isListening) return;
+    if (nextLanguage == _language) return;
+
+    _isSwitchingLocale = true;
+    _lastStatus = 'switching_locale';
+
+    // Preserve what has already been recognized before restarting the engine.
+    final currentText = _finalRecognized.isNotEmpty
+        ? _finalRecognized
+        : _recognized;
+    if (currentText.trim().isNotEmpty) {
+      _sessionTranscriptPrefix = currentText.trim();
+    }
+
+    notifyListeners();
+
+    await _speech.stop();
+    _language = nextLanguage;
+
+    _sessionGen++;
+    final gen = _sessionGen;
+    _lastResultAt = DateTime.now();
+
+    final started = await _speech.listen(
+      localeId: isGerman ? _germanLocaleId : _englishLocaleId,
+      partialResults: true,
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 4),
+      cancelOnError: false,
+      listenMode: ListenMode.dictation,
+      onResult: (result) {
+        if (_sessionGen != gen) return;
+        final words = result.recognizedWords.trim();
+        if (words.isEmpty) return;
+
+        final transcript = _postProcessTranscript(words);
+        final combinedTranscript = _mergeWithSessionPrefix(transcript);
+        _recognized = combinedTranscript;
+        _resultTick += 1;
+        _lastResultAt = DateTime.now();
+
+        if (result.hasConfidenceRating) {
+          final c = result.confidence;
+          _lastConfidence = (c > 0.0 && c <= 1.0) ? c : null;
+        }
+
+        _updateRealtimeWordConfidence(combinedTranscript, _lastConfidence);
+        _checkMidUtteranceLanguageSwitch(combinedTranscript);
+
+        if (result.finalResult) {
+          _finalRecognized = combinedTranscript;
+        }
+        notifyListeners();
+      },
+      onSoundLevelChange: (level) {
+        _minSoundLevel = level < _minSoundLevel ? level : _minSoundLevel;
+        _maxSoundLevel = level > _maxSoundLevel ? level : _maxSoundLevel;
+
+        final range = (_maxSoundLevel - _minSoundLevel).abs();
+        final normalized = range < 0.0001
+            ? 0.0
+            : ((level - _minSoundLevel) / range).clamp(0.0, 1.0);
+
+        _voiceLevel = (_voiceLevel * 0.22) + (normalized * 0.78);
+        notifyListeners();
+      },
+    );
+
+    if (!started) {
+      _lastStatus = 'failed_to_switch_locale';
+      _lastError ??= 'Could not switch speech locale while listening.';
+    } else {
+      _lastStatus = 'listening';
+    }
+
+    _isSwitchingLocale = false;
+    notifyListeners();
   }
 }

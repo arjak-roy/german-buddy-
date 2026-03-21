@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:ui';
@@ -57,15 +56,18 @@ class _MicButtonState extends State<MicButton>
     _coreScale = Tween<double>(begin: 0.98, end: 1.07).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutQuad),
     );
-    _ringScale = Tween<double>(begin: 0.80, end: 1.50).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutQuad),
-    );
-    _ringFade = Tween<double>(begin: 0.40, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInQuad),
-    );
-    _sweepRotation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.linear),
-    );
+    _ringScale = Tween<double>(
+      begin: 0.80,
+      end: 1.50,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutQuad));
+    _ringFade = Tween<double>(
+      begin: 0.40,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInQuad));
+    _sweepRotation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
   }
 
   @override
@@ -81,13 +83,16 @@ class _MicButtonState extends State<MicButton>
     final jitter = widget.isRecording ? wave * (0.06 + (level * 0.14)) : 0.0;
     final reactiveLevel = (level + jitter).clamp(0.0, 1.0);
     final ringSize = widget.diameter * 1.54;
-    final glowOpacity =
-      widget.isRecording ? 0.58 + (reactiveLevel * 0.42) : 0.4;
-    final borderWidth =
-      widget.isRecording ? 2.6 + (reactiveLevel * 3.6) : 2.0;
-    final recordingBoost =
-      widget.isRecording ? 1.0 + (reactiveLevel * 0.16) : 1.0;
-    final pulseBoost = widget.isRecording ? (1.0 + (reactiveLevel * 0.35)) : 1.0;
+    final glowOpacity = widget.isRecording
+        ? 0.58 + (reactiveLevel * 0.42)
+        : 0.4;
+    final borderWidth = widget.isRecording ? 2.6 + (reactiveLevel * 3.6) : 2.0;
+    final recordingBoost = widget.isRecording
+        ? 1.0 + (reactiveLevel * 0.16)
+        : 1.0;
+    final pulseBoost = widget.isRecording
+        ? (1.0 + (reactiveLevel * 0.35))
+        : 1.0;
 
     final mic = Hero(
       tag: widget.heroTag,
@@ -167,8 +172,18 @@ class _MicButtonState extends State<MicButton>
                           shape: BoxShape.circle,
                           gradient: RadialGradient(
                             colors: [
-                              const Color.fromARGB(255, 30, 30, 243).withOpacity(0.28),
-                              const Color.fromARGB(255, 8, 105, 185).withOpacity(0.18),
+                              const Color.fromARGB(
+                                255,
+                                30,
+                                30,
+                                243,
+                              ).withOpacity(0.28),
+                              const Color.fromARGB(
+                                255,
+                                8,
+                                105,
+                                185,
+                              ).withOpacity(0.18),
                               Colors.blueAccent.withOpacity(0.22),
                             ],
                             stops: const [0.2, 0.7, 1.0],
@@ -180,17 +195,26 @@ class _MicButtonState extends State<MicButton>
                           boxShadow: [
                             BoxShadow(
                               color: Colors.blueAccent.withOpacity(glowOpacity),
-                              blurRadius:
-                                  widget.isRecording ? 34 + (reactiveLevel * 26) : 24,
-                              spreadRadius:
-                                  widget.isRecording ? 5 + (reactiveLevel * 10) : 2,
+                              blurRadius: widget.isRecording
+                                  ? 34 + (reactiveLevel * 26)
+                                  : 24,
+                              spreadRadius: widget.isRecording
+                                  ? 5 + (reactiveLevel * 10)
+                                  : 2,
                             ),
                             BoxShadow(
-                              color: const Color.fromARGB(255, 8, 105, 185).withOpacity(0.18 + (reactiveLevel * 0.18)),
-                              blurRadius:
-                                  widget.isRecording ? 36 + (reactiveLevel * 22) : 30,
-                              spreadRadius:
-                                  widget.isRecording ? 8 + (reactiveLevel * 10) : 6,
+                              color: const Color.fromARGB(
+                                255,
+                                8,
+                                105,
+                                185,
+                              ).withOpacity(0.18 + (reactiveLevel * 0.18)),
+                              blurRadius: widget.isRecording
+                                  ? 36 + (reactiveLevel * 22)
+                                  : 30,
+                              spreadRadius: widget.isRecording
+                                  ? 8 + (reactiveLevel * 10)
+                                  : 6,
                             ),
                           ],
                         ),
@@ -199,10 +223,17 @@ class _MicButtonState extends State<MicButton>
                           reverseDuration: const Duration(milliseconds: 120),
                           transitionBuilder: (child, animation) {
                             return ScaleTransition(
-                              scale: Tween<double>(begin: 0.8, end: 1.0).animate(
-                                CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+                              scale: Tween<double>(begin: 0.8, end: 1.0)
+                                  .animate(
+                                    CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutBack,
+                                    ),
+                                  ),
+                              child: FadeTransition(
+                                opacity: animation,
+                                child: child,
                               ),
-                              child: FadeTransition(opacity: animation, child: child),
                             );
                           },
                           child: Icon(
@@ -235,7 +266,9 @@ class _MicButtonState extends State<MicButton>
           const SizedBox(height: 4),
           Text(
             'Tap and hold to speak to Buddy',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ],

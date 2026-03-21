@@ -4,11 +4,7 @@ class ResourceCard extends StatelessWidget {
   final IconData icon;
   final String title;
 
-  const ResourceCard({
-    required this.icon,
-    required this.title,
-    super.key,
-  });
+  const ResourceCard({required this.icon, required this.title, super.key});
 
   @override
   Widget build(BuildContext context) {

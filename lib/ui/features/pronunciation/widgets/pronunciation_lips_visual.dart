@@ -25,7 +25,10 @@ class PronunciationAnimatedLips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final safeIndex = activeIndex.clamp(0, visemes.isEmpty ? 0 : visemes.length - 1);
+    final safeIndex = activeIndex.clamp(
+      0,
+      visemes.isEmpty ? 0 : visemes.length - 1,
+    );
     final viseme = (!isPlaying || visemes.isEmpty || activeIndex < 0)
         ? PronunciationViseme.neutral
         : visemes[safeIndex];
@@ -60,11 +63,7 @@ class PronunciationAnimatedLips extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Positioned(
-              left: 24,
-              top: 44,
-              child: _CheekGlow(active: isPlaying),
-            ),
+            Positioned(left: 24, top: 44, child: _CheekGlow(active: isPlaying)),
             Positioned(
               right: 24,
               top: 44,
@@ -124,10 +123,22 @@ class _LipsPainter extends CustomPainter {
     final opening = size.height * pose.openFactor;
     final cornerLift = size.height * pose.cornerLift;
 
-    final leftCorner = Offset(center.dx - (lipWidth / 2), center.dy + cornerLift);
-    final rightCorner = Offset(center.dx + (lipWidth / 2), center.dy + cornerLift);
-    final topPeak = Offset(center.dx, center.dy - opening - (size.height * 0.07));
-    final bottomDip = Offset(center.dx, center.dy + opening + (size.height * 0.06));
+    final leftCorner = Offset(
+      center.dx - (lipWidth / 2),
+      center.dy + cornerLift,
+    );
+    final rightCorner = Offset(
+      center.dx + (lipWidth / 2),
+      center.dy + cornerLift,
+    );
+    final topPeak = Offset(
+      center.dx,
+      center.dy - opening - (size.height * 0.07),
+    );
+    final bottomDip = Offset(
+      center.dx,
+      center.dy + opening + (size.height * 0.06),
+    );
 
     final upperLip = Path()
       ..moveTo(leftCorner.dx, leftCorner.dy)
@@ -192,24 +203,38 @@ class _LipsPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final upperFill = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          const Color(0xFFFB7185).withAlpha(isPlaying ? 242 : 199),
-          const Color(0xFFE11D48).withAlpha(isPlaying ? 235 : 189),
-        ],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromCenter(center: center, width: lipWidth, height: size.height * 0.24));
+      ..shader =
+          LinearGradient(
+            colors: [
+              const Color(0xFFFB7185).withAlpha(isPlaying ? 242 : 199),
+              const Color(0xFFE11D48).withAlpha(isPlaying ? 235 : 189),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ).createShader(
+            Rect.fromCenter(
+              center: center,
+              width: lipWidth,
+              height: size.height * 0.24,
+            ),
+          );
 
     final lowerFill = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          const Color(0xFFFB7185).withAlpha(isPlaying ? 224 : 184),
-          const Color(0xFFBE123C).withAlpha(isPlaying ? 219 : 173),
-        ],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromCenter(center: center, width: lipWidth, height: size.height * 0.28));
+      ..shader =
+          LinearGradient(
+            colors: [
+              const Color(0xFFFB7185).withAlpha(isPlaying ? 224 : 184),
+              const Color(0xFFBE123C).withAlpha(isPlaying ? 219 : 173),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ).createShader(
+            Rect.fromCenter(
+              center: center,
+              width: lipWidth,
+              height: size.height * 0.28,
+            ),
+          );
 
     canvas.drawPath(lowerLip, lowerFill);
     canvas.drawPath(upperLip, upperFill);
@@ -246,7 +271,10 @@ class _LipsPainter extends CustomPainter {
       );
 
       final tongueRect = Rect.fromCenter(
-        center: Offset(mouthRect.center.dx, mouthRect.bottom - (mouthRect.height * 0.24)),
+        center: Offset(
+          mouthRect.center.dx,
+          mouthRect.bottom - (mouthRect.height * 0.24),
+        ),
         width: mouthRect.width * 0.58,
         height: mouthRect.height * 0.32,
       );
@@ -264,7 +292,10 @@ class _LipsPainter extends CustomPainter {
       ..color = Colors.white.withAlpha(isPlaying ? 66 : 46);
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(center.dx - (lipWidth * 0.17), center.dy - (opening * 0.58)),
+        center: Offset(
+          center.dx - (lipWidth * 0.17),
+          center.dy - (opening * 0.58),
+        ),
         width: lipWidth * 0.24,
         height: 6,
       ),
@@ -295,16 +326,46 @@ class _LipPose {
 _LipPose _poseForViseme(PronunciationViseme viseme) {
   switch (viseme) {
     case PronunciationViseme.openA:
-      return const _LipPose(widthFactor: 0.38, openFactor: 0.19, cornerLift: 0.0, innerWidth: 0.78);
+      return const _LipPose(
+        widthFactor: 0.38,
+        openFactor: 0.19,
+        cornerLift: 0.0,
+        innerWidth: 0.78,
+      );
     case PronunciationViseme.rounded:
-      return const _LipPose(widthFactor: 0.24, openFactor: 0.20, cornerLift: -0.01, innerWidth: 0.76);
+      return const _LipPose(
+        widthFactor: 0.24,
+        openFactor: 0.20,
+        cornerLift: -0.01,
+        innerWidth: 0.76,
+      );
     case PronunciationViseme.spread:
-      return const _LipPose(widthFactor: 0.46, openFactor: 0.09, cornerLift: -0.015, innerWidth: 0.84);
+      return const _LipPose(
+        widthFactor: 0.46,
+        openFactor: 0.09,
+        cornerLift: -0.015,
+        innerWidth: 0.84,
+      );
     case PronunciationViseme.consonant:
-      return const _LipPose(widthFactor: 0.34, openFactor: 0.10, cornerLift: -0.004, innerWidth: 0.8);
+      return const _LipPose(
+        widthFactor: 0.34,
+        openFactor: 0.10,
+        cornerLift: -0.004,
+        innerWidth: 0.8,
+      );
     case PronunciationViseme.tight:
-      return const _LipPose(widthFactor: 0.30, openFactor: 0.07, cornerLift: 0.0, innerWidth: 0.75);
+      return const _LipPose(
+        widthFactor: 0.30,
+        openFactor: 0.07,
+        cornerLift: 0.0,
+        innerWidth: 0.75,
+      );
     case PronunciationViseme.neutral:
-      return const _LipPose(widthFactor: 0.35, openFactor: 0.095, cornerLift: 0.0, innerWidth: 0.8);
+      return const _LipPose(
+        widthFactor: 0.35,
+        openFactor: 0.095,
+        cornerLift: 0.0,
+        innerWidth: 0.8,
+      );
   }
 }

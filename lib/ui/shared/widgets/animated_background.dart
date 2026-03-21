@@ -72,20 +72,21 @@ class _Circle {
     _y = math.Random().nextDouble();
     _radius = 0.1 + math.Random().nextDouble() * 0.2;
     _opacity = 0.1 + math.Random().nextDouble() * 0.2;
-    _controller.duration =
-        Duration(milliseconds: 2000 + math.Random().nextInt(2000));
+    _controller.duration = Duration(
+      milliseconds: 2000 + math.Random().nextInt(2000),
+    );
     _controller
       ..reset()
       ..forward();
   }
 
   _CircleValue get value => _CircleValue(
-        animation: _animation.value,
-        x: _x,
-        y: _y,
-        radius: _radius,
-        opacity: _opacity,
-      );
+    animation: _animation.value,
+    x: _x,
+    y: _y,
+    radius: _radius,
+    opacity: _opacity,
+  );
 
   void dispose() {
     _controller.dispose();
@@ -120,8 +121,12 @@ class _AnimatedBackgroundPainter extends CustomPainter {
 
     for (final circle in circles) {
       final radius = circle.radius * size.width * circle.animation;
-      paint.color =
-          Color.fromRGBO(255, 255, 255, circle.opacity * (1 - circle.animation));
+      paint.color = Color.fromRGBO(
+        255,
+        255,
+        255,
+        circle.opacity * (1 - circle.animation),
+      );
       canvas.drawCircle(
         Offset(circle.x * size.width, circle.y * size.height),
         radius,

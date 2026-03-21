@@ -8,6 +8,7 @@ import '../../../../data/services/gemini_service.dart';
 import '../../../../providers/app_providers.dart';
 import '../../../../providers/introduce_yourself_practice_provider.dart';
 import '../../../../providers/speech_provider.dart';
+import '../../../../providers/speaking_engine_provider.dart';
 import '../../pronunciation/models/pronunciation_item.dart';
 import '../../pronunciation/screens/pronunciation_lesson_screen.dart';
 import '../../pronunciation/widgets/pronunciation_mini_lab.dart';
@@ -45,17 +46,16 @@ const Map<String, String> _introduceYourselfWordTranslations = {
 
 // Add custom placeholders/words here to exclude them from matching and score.
 // Examples: '[Your Name]' (bracket placeholder) and free-form literal tokens.
-const Set<String> _introduceYourselfIgnoredWords = {
-  'your name',
-  '...'
-};
+const Set<String> _introduceYourselfIgnoredWords = {'your name', '...'};
 
 final introduceYourselfPracticeProviderNotifier =
-    ChangeNotifierProvider.autoDispose<IntroduceYourselfPracticeProvider>((ref) {
-  throw UnimplementedError(
-    'introduceYourselfPracticeProviderNotifier must be overridden in ProviderScope.',
-  );
-});
+    ChangeNotifierProvider.autoDispose<IntroduceYourselfPracticeProvider>((
+      ref,
+    ) {
+      throw UnimplementedError(
+        'introduceYourselfPracticeProviderNotifier must be overridden in ProviderScope.',
+      );
+    });
 
 class SpeakingExerciseScreen extends StatelessWidget {
   final SpeakingExerciseItem item;
@@ -64,7 +64,8 @@ class SpeakingExerciseScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isIntroduceYourself = item.title.toLowerCase() == 'introduce yourself';
+    final isIntroduceYourself =
+        item.title.toLowerCase() == 'introduce yourself';
 
     if (isIntroduceYourself) {
       return ProviderScope(
@@ -103,10 +104,7 @@ class _GenericSpeakingExerciseScreen extends StatelessWidget {
             icon: Icons.theater_comedy_rounded,
             iconColor: colors.primary,
             label: 'Scenario',
-            child: Text(
-              item.scenario,
-              style: theme.textTheme.bodyLarge,
-            ),
+            child: Text(item.scenario, style: theme.textTheme.bodyLarge),
           ),
           const SizedBox(height: 16),
 
@@ -138,8 +136,10 @@ class _GenericSpeakingExerciseScreen extends StatelessWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('• ',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text(
+                            '• ',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           Expanded(
                             child: Text(
                               phrase,
@@ -428,8 +428,13 @@ class _IntroduceYourselfExerciseScreenState
       builder: (dialogContext) {
         final theme = Theme.of(dialogContext);
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -467,7 +472,9 @@ class _IntroduceYourselfExerciseScreenState
     if (item == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No pronunciation page data found for "$word".')),
+        SnackBar(
+          content: Text('No pronunciation page data found for "$word".'),
+        ),
       );
       return;
     }
@@ -492,9 +499,10 @@ class _IntroduceYourselfExerciseScreenState
   }
 
   Map<String, dynamic>? _extractJsonObject(String raw) {
-    final codeBlock = RegExp(r'```json\s*([\s\S]*?)```', caseSensitive: false)
-        .firstMatch(raw)
-        ?.group(1);
+    final codeBlock = RegExp(
+      r'```json\s*([\s\S]*?)```',
+      caseSensitive: false,
+    ).firstMatch(raw)?.group(1);
     final candidate = (codeBlock ?? raw).trim();
 
     try {
@@ -514,7 +522,9 @@ class _IntroduceYourselfExerciseScreenState
     return null;
   }
 
-  Map<String, double> _sessionWordScoresFromPayload(Map<String, dynamic> payload) {
+  Map<String, double> _sessionWordScoresFromPayload(
+    Map<String, dynamic> payload,
+  ) {
     final out = <String, List<double>>{};
     final sentences = payload['sentences'];
     if (sentences is! List) return const {};
@@ -540,7 +550,9 @@ class _IntroduceYourselfExerciseScreenState
     });
   }
 
-  List<_SentenceScore> _sentenceScoresFromPayload(Map<String, dynamic> payload) {
+  List<_SentenceScore> _sentenceScoresFromPayload(
+    Map<String, dynamic> payload,
+  ) {
     final out = <_SentenceScore>[];
     final sentences = payload['sentences'];
     if (sentences is! List) return out;
@@ -620,37 +632,34 @@ class _IntroduceYourselfExerciseScreenState
 
   List<_SessionWordAnalysis> _fallbackAnalysis(Map<String, dynamic> payload) {
     final scores = _sessionWordScoresFromPayload(payload);
-    final list = scores.entries
-        .map((entry) {
-          final score = entry.value;
-          final status = score >= 75
-              ? 'high'
-              : (score >= 50 ? 'medium' : 'low');
-          final issue = status == 'high'
-              ? 'Stable and clear production.'
-              : (status == 'medium'
-                  ? 'Inconsistent clarity across attempts.'
-                  : 'Unclear pronunciation and low confidence.');
-          final suggestion = status == 'high'
-              ? 'Keep this word at natural speed.'
-              : (status == 'medium'
-                  ? 'Slow down and exaggerate vowels once, then repeat.'
-                  : 'Practice syllable by syllable and focus on mouth shape.');
-          return _SessionWordAnalysis(
-            word: entry.key,
-            score: score,
-            status: status,
-            issue: issue,
-            suggestion: suggestion,
-          );
-        })
-        .toList()
-      ..sort((a, b) => a.score.compareTo(b.score));
+    final list = scores.entries.map((entry) {
+      final score = entry.value;
+      final status = score >= 75 ? 'high' : (score >= 50 ? 'medium' : 'low');
+      final issue = status == 'high'
+          ? 'Stable and clear production.'
+          : (status == 'medium'
+                ? 'Inconsistent clarity across attempts.'
+                : 'Unclear pronunciation and low confidence.');
+      final suggestion = status == 'high'
+          ? 'Keep this word at natural speed.'
+          : (status == 'medium'
+                ? 'Slow down and exaggerate vowels once, then repeat.'
+                : 'Practice syllable by syllable and focus on mouth shape.');
+      return _SessionWordAnalysis(
+        word: entry.key,
+        score: score,
+        status: status,
+        issue: issue,
+        suggestion: suggestion,
+      );
+    }).toList()..sort((a, b) => a.score.compareTo(b.score));
 
     return list;
   }
 
-  List<_SessionWordAnalysis> _parseWordAnalysis(Map<String, dynamic> responseJson) {
+  List<_SessionWordAnalysis> _parseWordAnalysis(
+    Map<String, dynamic> responseJson,
+  ) {
     final items = responseJson['wordAnalysis'];
     if (items is! List) return const [];
 
@@ -660,7 +669,10 @@ class _IntroduceYourselfExerciseScreenState
           final map = item.cast<String, dynamic>();
           return _SessionWordAnalysis(
             word: (map['word'] ?? '').toString().trim().toLowerCase(),
-            score: ((map['score'] as num?)?.toDouble() ?? 0.0).clamp(0.0, 100.0),
+            score: ((map['score'] as num?)?.toDouble() ?? 0.0).clamp(
+              0.0,
+              100.0,
+            ),
             status: (map['status'] ?? '').toString().toLowerCase(),
             issue: (map['issue'] ?? '').toString().trim(),
             suggestion: (map['suggestion'] ?? '').toString().trim(),
@@ -694,7 +706,8 @@ class _IntroduceYourselfExerciseScreenState
     });
 
     try {
-      final prompt = 'Exercise: Introduce Yourself\\n'
+      final prompt =
+          'Exercise: Introduce Yourself\\n'
           'Input JSON:\\n$jsonPayload\\n'
           'Analyze this session and return the required strict JSON schema.';
 
@@ -709,7 +722,7 @@ class _IntroduceYourselfExerciseScreenState
         final overall = fallback.isEmpty
             ? 0.0
             : fallback.map((e) => e.score).reduce((a, b) => a + b) /
-                fallback.length;
+                  fallback.length;
         setState(() {
           _overallAnalysisScore = overall;
           _analysisSummary =
@@ -733,16 +746,16 @@ class _IntroduceYourselfExerciseScreenState
                       (fallback.isEmpty
                           ? 0.0
                           : fallback
-                                  .map((e) => e.score)
-                                  .reduce((a, b) => a + b) /
-                              fallback.length))
+                                    .map((e) => e.score)
+                                    .reduce((a, b) => a + b) /
+                                fallback.length))
                   .clamp(0.0, 100.0);
           _analysisSummary = (parsed['summary'] ?? '').toString().trim();
           _analysisSuggestions = (parsed['suggestions'] is List)
               ? (parsed['suggestions'] as List)
-                  .map((e) => e.toString())
-                  .where((e) => e.trim().isNotEmpty)
-                  .toList()
+                    .map((e) => e.toString())
+                    .where((e) => e.trim().isNotEmpty)
+                    .toList()
               : const [];
           _wordAnalysis = fallback;
         });
@@ -751,14 +764,16 @@ class _IntroduceYourselfExerciseScreenState
 
       setState(() {
         _overallAnalysisScore =
-            ((parsed['overallScore'] as num?)?.toDouble() ?? 0.0)
-                .clamp(0.0, 100.0);
+            ((parsed['overallScore'] as num?)?.toDouble() ?? 0.0).clamp(
+              0.0,
+              100.0,
+            );
         _analysisSummary = (parsed['summary'] ?? '').toString().trim();
         _analysisSuggestions = (parsed['suggestions'] is List)
             ? (parsed['suggestions'] as List)
-                .map((e) => e.toString())
-                .where((e) => e.trim().isNotEmpty)
-                .toList()
+                  .map((e) => e.toString())
+                  .where((e) => e.trim().isNotEmpty)
+                  .toList()
             : const [];
         _wordAnalysis = words..sort((a, b) => a.score.compareTo(b.score));
       });
@@ -788,27 +803,28 @@ class _IntroduceYourselfExerciseScreenState
     final theme = Theme.of(context);
     Map<String, dynamic>? payload;
     try {
-      payload = jsonDecode(practice.latestWordConfidenceJson) as Map<String, dynamic>;
+      payload =
+          jsonDecode(practice.latestWordConfidenceJson) as Map<String, dynamic>;
     } catch (_) {
       payload = null;
     }
 
-    final sessionWordScores =
-        payload == null ? const <String, double>{} : _sessionWordScoresFromPayload(payload);
-    final sentenceScores =
-        payload == null ? const <_SentenceScore>[] : _sentenceScoresFromPayload(payload);
+    final sessionWordScores = payload == null
+        ? const <String, double>{}
+        : _sessionWordScoresFromPayload(payload);
+    final sentenceScores = payload == null
+        ? const <_SentenceScore>[]
+        : _sentenceScoresFromPayload(payload);
     final sortedWords = sessionWordScores.entries.toList()
       ..sort((a, b) => a.value.compareTo(b.value));
     final weakWords = sortedWords.where((e) => e.value < 50).toList();
     final avgSessionScore = sortedWords.isEmpty
         ? 0.0
         : sortedWords.map((e) => e.value).reduce((a, b) => a + b) /
-            sortedWords.length;
+              sortedWords.length;
 
     return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -817,224 +833,232 @@ class _IntroduceYourselfExerciseScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            Row(
-              children: [
-                const Icon(Icons.analytics_rounded),
-                const SizedBox(width: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.analytics_rounded),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Session Analysis',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Text(
-                  'Session Analysis',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                  'This is the final analysis card. Your full session JSON is sent to Gemini for word-specific feedback.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _MetricChip(
+                      label: 'Words',
+                      value: sortedWords.length.toString(),
+                      color: Colors.blue.shade700,
+                    ),
+                    _MetricChip(
+                      label: 'Weak words',
+                      value: weakWords.length.toString(),
+                      color: Colors.red.shade700,
+                    ),
+                    _MetricChip(
+                      label: 'Session avg',
+                      value: avgSessionScore.toStringAsFixed(0),
+                      color: _scoreColor(avgSessionScore),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _isAnalyzingSession
+                          ? null
+                          : () => _runGeminiSessionAnalysis(practice),
+                      icon: _isAnalyzingSession
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome_rounded),
+                      label: Text(
+                        _isAnalyzingSession
+                            ? 'Analyzing...'
+                            : 'Analyze with Gemini',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Sentence Bar Graph',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'This is the final analysis card. Your full session JSON is sent to Gemini for word-specific feedback.',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _MetricChip(
-                  label: 'Words',
-                  value: sortedWords.length.toString(),
-                  color: Colors.blue.shade700,
+                const SizedBox(height: 6),
+                if (sentenceScores.isEmpty)
+                  const Text('No sentence scores yet.')
+                else
+                  ...sentenceScores.map(
+                    (s) => _buildScoreBar(
+                      label: 'S${s.index + 1}',
+                      score: s.score,
+                      color: _scoreColor(s.score),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Text(
+                  'Word Bar Graph (lowest first)',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                _MetricChip(
-                  label: 'Weak words',
-                  value: weakWords.length.toString(),
-                  color: Colors.red.shade700,
-                ),
-                _MetricChip(
-                  label: 'Session avg',
-                  value: avgSessionScore.toStringAsFixed(0),
-                  color: _scoreColor(avgSessionScore),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: _isAnalyzingSession
-                      ? null
-                      : () => _runGeminiSessionAnalysis(practice),
-                  icon: _isAnalyzingSession
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_awesome_rounded),
-                  label: Text(_isAnalyzingSession
-                      ? 'Analyzing...'
-                      : 'Analyze with Gemini'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Sentence Bar Graph',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            if (sentenceScores.isEmpty)
-              const Text('No sentence scores yet.')
-            else
-              ...sentenceScores.map(
-                (s) => _buildScoreBar(
-                  label: 'S${s.index + 1}',
-                  score: s.score,
-                  color: _scoreColor(s.score),
-                ),
-              ),
-            const SizedBox(height: 8),
-            Text(
-              'Word Bar Graph (lowest first)',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            if (sortedWords.isEmpty)
-              const Text('No word data yet.')
-            else
-              ...sortedWords.take(12).map(
-                (entry) => _buildScoreBar(
-                  label: entry.key,
-                  score: entry.value,
-                  color: _scoreColor(entry.value),
-                ),
-              ),
-            if (_analysisError != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _analysisError!,
-                style: TextStyle(
-                  color: Colors.red.shade700,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-            if (_overallAnalysisScore != null) ...[
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _scoreColor(_overallAnalysisScore!).withAlpha(28),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _scoreColor(_overallAnalysisScore!)),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      _overallAnalysisScore!.toStringAsFixed(0),
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
+                const SizedBox(height: 6),
+                if (sortedWords.isEmpty)
+                  const Text('No word data yet.')
+                else
+                  ...sortedWords
+                      .take(12)
+                      .map(
+                        (entry) => _buildScoreBar(
+                          label: entry.key,
+                          score: entry.value,
+                          color: _scoreColor(entry.value),
+                        ),
+                      ),
+                if (_analysisError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _analysisError!,
+                    style: TextStyle(
+                      color: Colors.red.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                if (_overallAnalysisScore != null) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _scoreColor(_overallAnalysisScore!).withAlpha(28),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
                         color: _scoreColor(_overallAnalysisScore!),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    const Text('Overall score'),
-                  ],
-                ),
-              ),
-            ],
-            if ((_analysisSummary ?? '').isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(_analysisSummary!, style: theme.textTheme.bodyMedium),
-            ],
-            if (_analysisSuggestions.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Suggestions',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              ..._analysisSuggestions.map(
-                (s) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text('• $s'),
-                ),
-              ),
-            ],
-            if (_wordAnalysis.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Word specific scores',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              ...List<Widget>.generate(_wordAnalysis.length, (index) {
-                final item = _wordAnalysis[index];
-                final color = _scoreColor(item.score);
-                final low = item.score < 50;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: color.withAlpha(20),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: color.withAlpha(120)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item.word,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              item.score.toStringAsFixed(0),
-                              style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (item.issue.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(item.issue),
-                        ],
-                        if (item.suggestion.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(item.suggestion),
-                        ],
-                        if (low) ...[
-                          const SizedBox(height: 8),
-                          OutlinedButton.icon(
-                            onPressed: () => _openPronunciationLessonForWord(item.word),
-                            icon: const Icon(Icons.record_voice_over_rounded),
-                            label: const Text('Practice this word'),
+                        Text(
+                          _overallAnalysisScore!.toStringAsFixed(0),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: _scoreColor(_overallAnalysisScore!),
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Overall score'),
                       ],
                     ),
                   ),
-                );
-              }),
-            ],
-          ],
+                ],
+                if ((_analysisSummary ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(_analysisSummary!, style: theme.textTheme.bodyMedium),
+                ],
+                if (_analysisSuggestions.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Suggestions',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ..._analysisSuggestions.map(
+                    (s) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('• $s'),
+                    ),
+                  ),
+                ],
+                if (_wordAnalysis.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Word specific scores',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  ...List<Widget>.generate(_wordAnalysis.length, (index) {
+                    final item = _wordAnalysis[index];
+                    final color = _scoreColor(item.score);
+                    final low = item.score < 50;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: color.withAlpha(20),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: color.withAlpha(120)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.word,
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                                Text(
+                                  item.score.toStringAsFixed(0),
+                                  style: TextStyle(
+                                    color: color,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (item.issue.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(item.issue),
+                            ],
+                            if (item.suggestion.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(item.suggestion),
+                            ],
+                            if (low) ...[
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    _openPronunciationLessonForWord(item.word),
+                                icon: const Icon(
+                                  Icons.record_voice_over_rounded,
+                                ),
+                                label: const Text('Practice this word'),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ],
             ),
           );
         },
@@ -1058,13 +1082,22 @@ class _IntroduceYourselfExerciseScreenState
             builder: (context, constraints) {
               final isAnalysisCard = practice.isCompleted;
               final sentence = practice.currentSentence;
+              // Preserve span-level info for UI highlights and TTS progress.
               final sentenceWordSpans = _wordSpans(sentence);
-              final targetTokens = sentenceWordSpans
-                  .where((span) => !_isIgnoredWordSpan(span))
-                  .map((span) => span.normalized)
+              // Use the SpeakingEngine tokenizer so ignore-words and placeholders
+              // are handled consistently with engine configuration.
+              final engine = ref.watch(speakingEngineProvider(widget.item));
+              final targetTokens = engine
+                  .tokenize(sentence)
+                  .where((t) => !t.ignored)
+                  .map((t) => t.normalized)
                   .where((token) => token.isNotEmpty)
                   .toList();
-              final spokenTokens = _tokenize(speech.currentTranscript).toSet();
+              final spokenTokens = engine
+                  .tokenize(speech.currentTranscript)
+                  .where((t) => !t.ignored)
+                  .map((t) => t.normalized)
+                  .toSet();
               final confidence = (speech.lastConfidence ?? 0.0).clamp(0.0, 1.0);
               final liveWordConfidence = speech.liveWordConfidence;
               final matchedConfidences = targetTokens
@@ -1074,7 +1107,7 @@ class _IntroduceYourselfExerciseScreenState
               final averageWordConfidence = matchedConfidences.isEmpty
                   ? confidence
                   : matchedConfidences.reduce((a, b) => a + b) /
-                      matchedConfidences.length;
+                        matchedConfidences.length;
               if (!isAnalysisCard) {
                 practice.updateWordConfidenceReport(
                   sentence: sentence,
@@ -1088,7 +1121,8 @@ class _IntroduceYourselfExerciseScreenState
               final rate = _matchRate(targetTokens, spokenTokens);
               final isLastSentence =
                   practice.currentSentenceIndex == practice.script.length - 1;
-              final nextLocked = isLastSentence && !practice.hasAttemptedCurrentSentence;
+              final nextLocked =
+                  isLastSentence && !practice.hasAttemptedCurrentSentence;
               final showEmojiCoach =
                   !isAnalysisCard &&
                   (speech.isListening ||
@@ -1097,7 +1131,8 @@ class _IntroduceYourselfExerciseScreenState
 
               if (isAnalysisCard) {
                 final payload = practice.latestWordConfidenceJson.trim();
-                final canAutoRun = payload.isNotEmpty &&
+                final canAutoRun =
+                    payload.isNotEmpty &&
                     payload != '{}' &&
                     !_isAnalyzingSession &&
                     _lastAutoAnalyzedPayload != payload;
@@ -1110,399 +1145,432 @@ class _IntroduceYourselfExerciseScreenState
                 }
               }
 
-                  final compact = constraints.maxHeight < 760;
-                  final sectionGap = compact ? 8.0 : 12.0;
-                  final centerFlex = compact ? 7 : 8;
-                  final bottomFlex = compact ? 3 : 2;
+              final compact = constraints.maxHeight < 760;
+              final sectionGap = compact ? 8.0 : 12.0;
+              final centerFlex = compact ? 7 : 8;
+              final bottomFlex = compact ? 3 : 2;
 
-                  return Column(
-                    children: [
-                      Card(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+              return Column(
+                children: [
+                  Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(compact ? 10 : 14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.record_voice_over_rounded,
+                            color: colors.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              isAnalysisCard
+                                  ? 'Final card: analyze your full session JSON and get word-specific suggestions.'
+                                  : 'Read each sentence out loud. Words turn green/orange/red based on live confidence.',
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: sectionGap),
+                  if (showEmojiCoach) ...[
+                    TweenAnimationBuilder<double>(
+                      duration: const Duration(milliseconds: 260),
+                      tween: Tween<double>(
+                        begin: 1.0,
+                        end: speech.isListening
+                            ? (1.0 + (confidence * 0.22))
+                            : 1.0,
+                      ),
+                      builder: (context, scale, child) {
+                        return Transform.scale(scale: scale, child: child);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: compact ? 10 : 14,
+                          vertical: compact ? 8 : 10,
                         ),
-                        child: Padding(
-                          padding: EdgeInsets.all(compact ? 10 : 14),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.record_voice_over_rounded,
-                                color: colors.primary,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  isAnalysisCard
-                                      ? 'Final card: analyze your full session JSON and get word-specific suggestions.'
-                                      : 'Read each sentence out loud. Words turn green/orange/red based on live confidence.',
-                                  style: theme.textTheme.bodyMedium,
+                        decoration: BoxDecoration(
+                          color: _wordColor(
+                            matched: true,
+                            confidence: confidence,
+                          ).withAlpha(28),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _wordColor(
+                              matched: true,
+                              confidence: confidence,
+                            ).withAlpha(90),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _emojiForConfidence(confidence),
+                              style: const TextStyle(fontSize: 28),
+                            ),
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                _emojiHintForConfidence(confidence),
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                      SizedBox(height: sectionGap),
-                      if (showEmojiCoach) ...[
-                        TweenAnimationBuilder<double>(
-                          duration: const Duration(milliseconds: 260),
-                          tween: Tween<double>(
-                            begin: 1.0,
-                            end: speech.isListening
-                                ? (1.0 + (confidence * 0.22))
-                                : 1.0,
-                          ),
-                          builder: (context, scale, child) {
-                            return Transform.scale(scale: scale, child: child);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 220),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: compact ? 10 : 14,
-                              vertical: compact ? 8 : 10,
+                    ),
+                    SizedBox(height: sectionGap),
+                  ],
+                  Expanded(
+                    flex: centerFlex,
+                    child: isAnalysisCard
+                        ? _buildAnalysisPage(context, practice)
+                        : Card(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
                             ),
-                            decoration: BoxDecoration(
-                              color: _wordColor(matched: true, confidence: confidence)
-                                  .withAlpha(28),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color:
-                                    _wordColor(matched: true, confidence: confidence)
-                                        .withAlpha(90),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _emojiForConfidence(confidence),
-                                  style: const TextStyle(fontSize: 28),
-                                ),
-                                const SizedBox(width: 10),
-                                Flexible(
-                                  child: Text(
-                                    _emojiHintForConfidence(confidence),
+                            elevation: 2,
+                            child: SingleChildScrollView(
+                              padding: EdgeInsets.all(compact ? 12 : 18),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Sentence ${practice.currentSentenceIndex + 1}/${practice.script.length}',
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
                                     textAlign: TextAlign.center,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: sectionGap),
-                      ],
-                      Expanded(
-                        flex: centerFlex,
-                        child: isAnalysisCard
-                            ? _buildAnalysisPage(context, practice)
-                            : Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          elevation: 2,
-                          child: SingleChildScrollView(
-                            padding: EdgeInsets.all(compact ? 12 : 18),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Sentence ${practice.currentSentenceIndex + 1}/${practice.script.length}',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                SizedBox(height: compact ? 6 : 10),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    IconButton.filledTonal(
-                                      onPressed: practice.currentSentenceIndex == 0
-                                          ? null
-                                          : () => _goToPreviousSentence(speech),
-                                      icon: const Icon(Icons.chevron_left_rounded),
-                                      tooltip: 'Previous sentence',
-                                    ),
-                                    IconButton.filled(
-                                      onPressed: () => _speakCurrentSentence(
-                                        sentence,
-                                        practice.ttsSpeed,
-                                      ),
-                                      icon: const Icon(Icons.volume_up_rounded),
-                                      tooltip: 'Play sentence',
-                                    ),
-                                    IconButton.filledTonal(
-                                      onPressed: nextLocked
-                                          ? null
-                                          : () => _goToNextSentence(speech),
-                                      icon: Icon(
-                                        nextLocked
-                                            ? Icons.lock_rounded
-                                            : Icons.chevron_right_rounded,
-                                      ),
-                                      tooltip: nextLocked
-                                          ? 'Attempt this sentence once to unlock analysis'
-                                          : 'Next sentence',
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: compact ? 10 : 16),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: List<Widget>.generate(
-                                    sentenceWordSpans.length,
-                                    (index) {
-                                      final span = sentenceWordSpans[index];
-                                      final isIgnored = _isIgnoredWordSpan(span);
-                                      final matched =
-                                          !isIgnored &&
-                                          spokenTokens.contains(span.normalized);
-                                      final wordConfidence = (isIgnored || !matched)
-                                          ? 0.0
-                                          : (speech.confidenceForWord(
-                                                  span.normalized,
-                                                ) ??
-                                                confidence);
-                                      final color = isIgnored
-                                          ? Colors.blueGrey.shade600
-                                          : _wordColor(
-                                              matched: matched,
-                                              confidence: wordConfidence,
-                                            );
-                                      final isTtsWord = practice.isTtsSpeaking &&
-                                          index == practice.ttsWordIndex;
-                                      final maxChipWidth =
-                                          (MediaQuery.of(context).size.width * 0.28)
-                                              .clamp(86.0, 150.0);
-                                      return InkWell(
-                                        borderRadius: BorderRadius.circular(20),
-                                        onTap: isIgnored
+                                  SizedBox(height: compact ? 6 : 10),
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      IconButton.filledTonal(
+                                        onPressed:
+                                            practice.currentSentenceIndex == 0
                                             ? null
-                                            : () => _openWordPronunciationLab(
+                                            : () =>
+                                                  _goToPreviousSentence(speech),
+                                        icon: const Icon(
+                                          Icons.chevron_left_rounded,
+                                        ),
+                                        tooltip: 'Previous sentence',
+                                      ),
+                                      IconButton.filled(
+                                        onPressed: () => _speakCurrentSentence(
+                                          sentence,
+                                          practice.ttsSpeed,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.volume_up_rounded,
+                                        ),
+                                        tooltip: 'Play sentence',
+                                      ),
+                                      IconButton.filledTonal(
+                                        onPressed: nextLocked
+                                            ? null
+                                            : () => _goToNextSentence(speech),
+                                        icon: Icon(
+                                          nextLocked
+                                              ? Icons.lock_rounded
+                                              : Icons.chevron_right_rounded,
+                                        ),
+                                        tooltip: nextLocked
+                                            ? 'Attempt this sentence once to unlock analysis'
+                                            : 'Next sentence',
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: compact ? 10 : 16),
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: List<Widget>.generate(
+                                      sentenceWordSpans.length,
+                                      (index) {
+                                        final span = sentenceWordSpans[index];
+                                        final isIgnored = _isIgnoredWordSpan(
+                                          span,
+                                        );
+                                        final matched =
+                                            !isIgnored &&
+                                            spokenTokens.contains(
+                                              span.normalized,
+                                            );
+                                        final wordConfidence =
+                                            (isIgnored || !matched)
+                                            ? 0.0
+                                            : (speech.confidenceForWord(
+                                                    span.normalized,
+                                                  ) ??
+                                                  confidence);
+                                        final color = isIgnored
+                                            ? Colors.blueGrey.shade600
+                                            : _wordColor(
+                                                matched: matched,
+                                                confidence: wordConfidence,
+                                              );
+                                        final isTtsWord =
+                                            practice.isTtsSpeaking &&
+                                            index == practice.ttsWordIndex;
+                                        final maxChipWidth =
+                                            (MediaQuery.of(context).size.width *
+                                                    0.28)
+                                                .clamp(86.0, 150.0);
+                                        return InkWell(
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          onTap: isIgnored
+                                              ? null
+                                              : () => _openWordPronunciationLab(
                                                   context,
                                                   span.raw,
                                                   practice.ttsSpeed,
                                                 ),
-                                        child: AnimatedContainer(
-                                          duration:
-                                              const Duration(milliseconds: 140),
-                                          constraints: BoxConstraints(
-                                            maxWidth: maxChipWidth,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isIgnored
-                                                ? Colors.blueGrey.shade50
-                                                : (isTtsWord
-                                                    ? colors.primary.withAlpha(40)
-                                                    : color.withAlpha(30)),
-                                            borderRadius:
-                                                BorderRadius.circular(20),
-                                            border: Border.all(
-                                              color: isIgnored
-                                                  ? Colors.blueGrey.shade300
-                                                  : (isTtsWord
-                                                      ? colors.primary
-                                                      : color),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 140,
                                             ),
-                                          ),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                span.raw,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: theme.textTheme.bodyLarge
-                                                    ?.copyWith(
-                                                  color: isIgnored
-                                                      ? Colors.blueGrey.shade700
-                                                      : (isTtsWord
+                                            constraints: BoxConstraints(
+                                              maxWidth: maxChipWidth,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isIgnored
+                                                  ? Colors.blueGrey.shade50
+                                                  : (isTtsWord
+                                                        ? colors.primary
+                                                              .withAlpha(40)
+                                                        : color.withAlpha(30)),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              border: Border.all(
+                                                color: isIgnored
+                                                    ? Colors.blueGrey.shade300
+                                                    : (isTtsWord
                                                           ? colors.primary
                                                           : color),
-                                                  fontWeight: FontWeight.w600,
-                                                ),
                                               ),
-                                              if (_translationForWord(
-                                                      span.normalized,
-                                                    )
-                                                    .isNotEmpty)
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.center,
+                                              children: [
                                                 Text(
-                                                  _translationForWord(
-                                                    span.normalized,
-                                                  ),
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  textAlign: TextAlign.center,
+                                                  span.raw,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                   style: theme
-                                                      .textTheme.labelSmall
+                                                      .textTheme
+                                                      .bodyLarge
                                                       ?.copyWith(
-                                                    color:
-                                                        colors.onSurfaceVariant,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                                        color: isIgnored
+                                                            ? Colors
+                                                                  .blueGrey
+                                                                  .shade700
+                                                            : (isTtsWord
+                                                                  ? colors
+                                                                        .primary
+                                                                  : color),
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
                                                 ),
-                                            ],
+                                                if (_translationForWord(
+                                                  span.normalized,
+                                                ).isNotEmpty)
+                                                  Text(
+                                                    _translationForWord(
+                                                      span.normalized,
+                                                    ),
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    textAlign: TextAlign.center,
+                                                    style: theme
+                                                        .textTheme
+                                                        .labelSmall
+                                                        ?.copyWith(
+                                                          color: colors
+                                                              .onSurfaceVariant,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                  ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                    },
+                                        );
+                                      },
+                                    ),
                                   ),
-                                ),
-                                SizedBox(height: compact ? 10 : 18),
-                                if (!practice.isCompleted)
-                                  Text(
-                                    'Match: ${(rate * 100).toStringAsFixed(0)}%  |  Word conf: ${(averageWordConfidence * 100).toStringAsFixed(0)}%',
-                                    style: theme.textTheme.bodySmall?.copyWith(
+                                  SizedBox(height: compact ? 10 : 18),
+                                  if (!practice.isCompleted)
+                                    Text(
+                                      'Match: ${(rate * 100).toStringAsFixed(0)}%  |  Word conf: ${(averageWordConfidence * 100).toStringAsFixed(0)}%',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: colors.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  if (nextLocked) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Speak this final sentence once to unlock analysis.',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: Colors.orange.shade800,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                  ),
+                  if (!isAnalysisCard) ...[
+                    SizedBox(height: sectionGap),
+                    Expanded(
+                      flex: bottomFlex,
+                      child: Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                if (!isAnalysisCard) ...[
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          speech.currentTranscript
+                                                  .trim()
+                                                  .isEmpty
+                                              ? 'Start speaking...'
+                                              : speech.currentTranscript,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodyMedium,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      FilledButton.icon(
+                                        style: FilledButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
+                                          minimumSize: const Size(0, 34),
+                                        ),
+                                        onPressed: () =>
+                                            _toggleListening(speech),
+                                        icon: Icon(
+                                          speech.isListening
+                                              ? Icons.stop_rounded
+                                              : Icons.mic_rounded,
+                                          size: 18,
+                                        ),
+                                        label: Text(
+                                          speech.isListening ? 'Stop' : 'Speak',
+                                          style: theme.textTheme.labelMedium,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      _LegendDot(
+                                        color: Colors.green.shade600,
+                                        label: 'high',
+                                      ),
+                                      const SizedBox(width: 14),
+                                      _LegendDot(
+                                        color: Colors.orange.shade700,
+                                        label: 'medium',
+                                      ),
+                                      const SizedBox(width: 14),
+                                      _LegendDot(
+                                        color: Colors.red.shade600,
+                                        label: 'low',
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.speed_rounded, size: 18),
+                                      const SizedBox(width: 8),
+                                      const Text('TTS speed'),
+                                      Expanded(
+                                        child: Slider(
+                                          min: 0.25,
+                                          max: 0.75,
+                                          divisions: 10,
+                                          value: practice.ttsSpeed,
+                                          label: practice.ttsSpeed
+                                              .toStringAsFixed(2),
+                                          onChanged: (value) {
+                                            practice.setTtsSpeed(value);
+                                            _tts.setSpeechRate(value);
+                                          },
+                                        ),
+                                      ),
+                                      Text(
+                                        practice.ttsSpeed.toStringAsFixed(2),
+                                        style: theme.textTheme.labelSmall,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                ],
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Word confidence JSON ready (${practice.latestWordConfidenceJson.length} chars)',
+                                    style: theme.textTheme.labelSmall?.copyWith(
                                       color: colors.onSurfaceVariant,
                                     ),
                                   ),
-                                if (nextLocked) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Speak this final sentence once to unlock analysis.',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: Colors.orange.shade800,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
+                                ),
                               ],
                             ),
                           ),
                         ),
                       ),
-                      if (!isAnalysisCard) ...[
-                        SizedBox(height: sectionGap),
-                        Expanded(
-                          flex: bottomFlex,
-                          child: Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: [
-                                  if (!isAnalysisCard) ...[
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            speech.currentTranscript.trim().isEmpty
-                                                ? 'Start speaking...'
-                                                : speech.currentTranscript,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: theme.textTheme.bodyMedium,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        FilledButton.icon(
-                                          style: FilledButton.styleFrom(
-                                            visualDensity: VisualDensity.compact,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 8,
-                                            ),
-                                            minimumSize: const Size(0, 34),
-                                          ),
-                                          onPressed: () => _toggleListening(speech),
-                                          icon: Icon(
-                                            speech.isListening
-                                                ? Icons.stop_rounded
-                                                : Icons.mic_rounded,
-                                            size: 18,
-                                          ),
-                                          label: Text(
-                                            speech.isListening ? 'Stop' : 'Speak',
-                                            style: theme.textTheme.labelMedium,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        _LegendDot(
-                                          color: Colors.green.shade600,
-                                          label: 'high',
-                                        ),
-                                        const SizedBox(width: 14),
-                                        _LegendDot(
-                                          color: Colors.orange.shade700,
-                                          label: 'medium',
-                                        ),
-                                        const SizedBox(width: 14),
-                                        _LegendDot(
-                                          color: Colors.red.shade600,
-                                          label: 'low',
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.speed_rounded, size: 18),
-                                        const SizedBox(width: 8),
-                                        const Text('TTS speed'),
-                                        Expanded(
-                                          child: Slider(
-                                            min: 0.25,
-                                            max: 0.75,
-                                            divisions: 10,
-                                            value: practice.ttsSpeed,
-                                            label:
-                                                practice.ttsSpeed.toStringAsFixed(2),
-                                            onChanged: (value) {
-                                              practice.setTtsSpeed(value);
-                                              _tts.setSpeechRate(value);
-                                            },
-                                          ),
-                                        ),
-                                        Text(
-                                          practice.ttsSpeed.toStringAsFixed(2),
-                                          style: theme.textTheme.labelSmall,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                  ],
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      'Word confidence JSON ready (${practice.latestWordConfidenceJson.length} chars)',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: colors.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        ),
-                      ],
-                    ],
-                  );
+                    ),
+                  ],
+                ],
+              );
             },
           ),
         ),

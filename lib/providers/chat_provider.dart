@@ -29,8 +29,8 @@ class ChatProvider extends ChangeNotifier {
   bool _isBuddyVoiceStopping = false;
   String _buddyVoiceTranscript = '';
   int _buddyInterruptToken = 0;
-  Future<void>? _buddyPrepareFuture;
   String? _buddyLiveError;
+  bool _didStartLiveConversation = false;
 
   bool get isBuddyPreparing => _isBuddyPreparing;
   bool get isBuddyLiveReady => _isBuddyLiveReady;
@@ -39,6 +39,8 @@ class ChatProvider extends ChangeNotifier {
   String get buddyVoiceTranscript => _buddyVoiceTranscript;
   int get buddyInterruptToken => _buddyInterruptToken;
   String? get buddyLiveError => _buddyLiveError;
+
+  bool get didStartLiveConversation => _didStartLiveConversation;
 
   /// Add a raw entry and notify listeners.
   void addMessage(ChatEntry entry) {
@@ -245,8 +247,6 @@ class ChatProvider extends ChangeNotifier {
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty) return;
 
-    await prepareBuddyLiveSession();
-
     // add user message immediately
     addMessage(ChatEntry(text: text, isUser: true));
 
@@ -255,7 +255,7 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       final wantsStructured = _wantsStructuredOutput(text);
-      var reply = await _service.askBuddyLive(text);
+      var reply = await _service.askBuddy(text);
 
       if (wantsStructured && !_looksStructured(reply.text)) {
         final fallbackText = await _service.ask(text);
@@ -282,151 +282,29 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> prepareBuddyLiveSession() async {
-    if (_isBuddyLiveReady) return;
-    if (_buddyPrepareFuture != null) {
-      await _buddyPrepareFuture;
-      return;
-    }
-
-    _isBuddyPreparing = true;
-    notifyListeners();
-
-    _buddyPrepareFuture = () async {
-      try {
-        await _service.startBuddyLiveSession();
-        _isBuddyLiveReady = _service.isBuddyLiveConnected;
-        _buddyLiveError = null;
-      } catch (e) {
-        _isBuddyLiveReady = false;
-        _buddyLiveError = _service.buddyLiveLastError ?? e.toString();
-      }
-    }();
-
-    await _buddyPrepareFuture;
-
-    _buddyPrepareFuture = null;
-
+  Future<void> prepareBuddyLiveSession({bool startConversation = false}) async {
     _isBuddyPreparing = false;
+    _isBuddyLiveReady = false;
+    _buddyLiveError = null;
     notifyListeners();
   }
 
   Future<void> startBuddyVoiceTurn() async {
-    if (_isBuddyVoiceActive) return;
-    if (_isBuddyVoiceStopping) {
-      debugPrint('[BuddyLive] start ignored while stop is in progress.');
-      return;
-    }
-
-    await prepareBuddyLiveSession();
-    if (!_isBuddyLiveReady) {
-      addMessage(
-        ChatEntry(
-          text: _buddyLiveError ?? 'Buddy live session is unavailable.',
-          isUser: false,
-        ),
-      );
-      return;
-    }
-
-    final hasPermission = await _buddyAudioRecorder.hasPermission();
-    if (!hasPermission) {
-      addMessage(
-        ChatEntry(
-          text: 'Microphone permission is required for voice chat.',
-          isUser: false,
-        ),
-      );
-      return;
-    }
-
-    try {
-      final inputStream = await _buddyAudioRecorder.startStream(
-        const RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          sampleRate: 24000,
-          numChannels: 1,
-          echoCancel: true,
-          noiseSuppress: true,
-          androidConfig: AndroidRecordConfig(
-            audioSource: AndroidAudioSource.voiceCommunication,
-          ),
-        ),
-      );
-      await _service.startBuddyLiveAudioTurn(inputStream, sampleRateHz: 24000);
-      _buddyVoiceTranscript = '';
-      _isBuddyVoiceActive = true;
-      debugPrint('[BuddyLive] mic recording started (24kHz mono pcm16).');
-      notifyListeners();
-    } catch (e) {
-      _isBuddyVoiceActive = false;
-      debugPrint('[BuddyLive] start voice turn failed: $e');
-      addMessage(ChatEntry(text: 'Fehler: $e', isUser: false));
-      notifyListeners();
-    }
+    addMessage(
+      ChatEntry(
+        text: 'Live voice mode is disabled for now. Please type your message.',
+        isUser: false,
+      ),
+    );
   }
 
   Future<void> stopBuddyVoiceTurn() async {
-    if (!_isBuddyVoiceActive) return;
-    if (_isBuddyVoiceStopping) {
-      debugPrint('[BuddyLive] duplicate stop ignored.');
-      return;
-    }
-    _isBuddyVoiceStopping = true;
-
-    try {
-      await _buddyAudioRecorder.stop();
-      debugPrint('[BuddyLive] mic recording stopped; waiting for model turn.');
-      final reply = await _service.finishBuddyLiveAudioTurn();
-      debugPrint(
-        '[BuddyLive] provider received reply '
-        'textLen=${reply.text.length} '
-        'audioBytes=${reply.audioBytes?.length ?? 0} '
-        'inputTxLen=${reply.inputTranscription?.length ?? 0} '
-        'outputTxLen=${reply.outputTranscription?.length ?? 0} '
-        'lastError=${_service.buddyLiveLastError ?? 'none'}',
-      );
-
-      final heard = (reply.inputTranscription ?? '').trim();
-      if (heard.isNotEmpty) {
-        addMessage(ChatEntry(text: heard, isUser: true));
-      }
-
-      final responseText = reply.text.trim();
-      if (responseText.isNotEmpty) {
-        addMessage(_parseReply(responseText));
-      }
-
-      if (responseText.isEmpty &&
-          (reply.audioBytes == null || reply.audioBytes!.isEmpty) &&
-          (reply.outputTranscription ?? '').trim().isEmpty) {
-        final reason =
-            _service.buddyLiveLastError ??
-            'No audio or transcription returned from Buddy.';
-        addMessage(ChatEntry(text: 'Fehler: $reason', isUser: false));
-      }
-
-      _buddyVoiceTranscript = heard;
-
-      if (reply.audioBytes != null && reply.audioBytes!.isNotEmpty) {
-        _latestAiAudioBytes = reply.audioBytes;
-        _latestAiAudioMimeType = reply.audioMimeType;
-        _latestAiAudioToken += 1;
-      }
-    } catch (e) {
-      debugPrint('[BuddyLive] stop voice turn failed: $e');
-      addMessage(ChatEntry(text: 'Fehler: $e', isUser: false));
-    } finally {
-      _isBuddyVoiceActive = false;
-      _isBuddyVoiceStopping = false;
-      notifyListeners();
-    }
+    _isBuddyVoiceActive = false;
+    _isBuddyVoiceStopping = false;
+    notifyListeners();
   }
 
   Future<void> cancelBuddyVoiceTurn() async {
-    if (!_isBuddyVoiceActive) return;
-    await _buddyAudioRecorder.stop();
-    await _service.cancelBuddyLiveAudioTurn();
     _isBuddyVoiceActive = false;
     notifyListeners();
   }
@@ -435,7 +313,6 @@ class ChatProvider extends ChangeNotifier {
   void dispose() {
     _buddyInterruptSub?.cancel();
     _buddyAudioRecorder.dispose();
-    _service.disposeBuddyLive();
     super.dispose();
   }
 }

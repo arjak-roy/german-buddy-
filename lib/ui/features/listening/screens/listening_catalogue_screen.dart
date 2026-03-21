@@ -31,9 +31,9 @@ class ListeningCatalogueScreen extends StatelessWidget {
               contentPadding: const EdgeInsets.all(20),
               title: Text(
                 item.title,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(item.description),
               trailing: const Icon(Icons.chevron_right_rounded),

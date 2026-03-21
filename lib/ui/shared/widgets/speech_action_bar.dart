@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../providers/app_providers.dart';
+import '../../../providers/speech_provider.dart';
 import '../../features/buddy/widgets/buddy_mic_button.dart';
 
 class SpeechActionBar extends ConsumerStatefulWidget {
@@ -30,6 +31,9 @@ class SpeechActionBar extends ConsumerStatefulWidget {
 }
 
 class _SpeechActionBarState extends ConsumerState<SpeechActionBar> {
+  SpeechLanguage? _previousLanguage;
+  bool _showLanguageSwitch = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,11 +49,28 @@ class _SpeechActionBarState extends ConsumerState<SpeechActionBar> {
     final usesCustomVoice =
         widget.onCustomVoiceStart != null && widget.onCustomVoiceStop != null;
     final isVoiceActive =
-        widget.isCustomVoiceActive ?? (usesCustomVoice ? false : speech.isListening);
+        widget.isCustomVoiceActive ??
+        (usesCustomVoice ? false : speech.isListening);
     final voiceLevel = widget.customVoiceLevel ?? speech.voiceLevel;
-    final transcript = (widget.customTranscript ?? speech.currentTranscript).trim();
+    final transcript = (widget.customTranscript ?? speech.currentTranscript)
+        .trim();
 
     final isGerman = speech.isGerman;
+
+    // Detect language change and trigger visual feedback
+    if (_previousLanguage != null && _previousLanguage != speech.language) {
+      _showLanguageSwitch = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Future<void>.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              setState(() => _showLanguageSwitch = false);
+            }
+          });
+        }
+      });
+    }
+    _previousLanguage = speech.language;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
@@ -61,10 +82,7 @@ class _SpeechActionBarState extends ConsumerState<SpeechActionBar> {
             Container(
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.72),
                 borderRadius: BorderRadius.circular(10),
@@ -105,38 +123,79 @@ class _SpeechActionBarState extends ConsumerState<SpeechActionBar> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              GestureDetector(
-                onTap: () => speech.toggleLanguage(),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isGerman
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    isGerman ? 'DE' : 'EN',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isGerman
-                          ? Theme.of(context).colorScheme.onPrimaryContainer
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(
+                  begin: 1.0,
+                  end: _showLanguageSwitch ? 1.15 : 1.0,
                 ),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                builder: (context, scale, child) {
+                  return Transform.scale(
+                    scale: scale,
+                    child: GestureDetector(
+                      onTap: () => speech.toggleLanguage(),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: _showLanguageSwitch
+                              ? [
+                                  BoxShadow(
+                                    color:
+                                        (isGerman
+                                                ? Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary
+                                                : Colors.blue)
+                                            .withOpacity(0.6),
+                                    blurRadius: 12,
+                                    spreadRadius: 2,
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            color: isGerman
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            isGerman ? 'DE' : 'EN',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isGerman
+                                  ? Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimaryContainer
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
               BuddyMicButton(
                 isRecording: isVoiceActive,
                 voiceLevel: voiceLevel,
-                onTap: () =>
-                    usesCustomVoice ? _toggleCustomVoice() : _toggleListening(context),
-                onLongPressStart: () =>
-                    usesCustomVoice ? _startCustomVoice() : _startListening(context),
+                onTap: () => usesCustomVoice
+                    ? _toggleCustomVoice()
+                    : _toggleListening(context),
+                onLongPressStart: () => usesCustomVoice
+                    ? _startCustomVoice()
+                    : _startListening(context),
                 onLongPressEnd: () => usesCustomVoice
                     ? _stopCustomVoice()
                     : _stopListeningAndSubmit(context),
@@ -150,10 +209,7 @@ class _SpeechActionBarState extends ConsumerState<SpeechActionBar> {
                 tooltip: 'Keyboard',
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.all(10),
-                constraints: const BoxConstraints(
-                  minWidth: 40,
-                  minHeight: 40,
-                ),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
             ],
           ),
@@ -161,10 +217,7 @@ class _SpeechActionBarState extends ConsumerState<SpeechActionBar> {
             const SizedBox(height: 6),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.66),
                 borderRadius: BorderRadius.circular(10),
@@ -274,14 +327,18 @@ class _SpeechActionBarState extends ConsumerState<SpeechActionBar> {
     // Only submit if STT was actually running when this was called.
     final wasListening = speech.isListening;
     final preStopText = wasListening ? speech.currentTranscript.trim() : '';
-    final preStopHeardText = wasListening ? speech.lastRecognizedText.trim() : '';
+    final preStopHeardText = wasListening
+        ? speech.lastRecognizedText.trim()
+        : '';
 
     final captured = await speech.stopListeningAndCollect();
     if (!mounted) return;
 
     final postStopText = captured?.text.trim() ?? '';
     final fallbackText = wasListening ? speech.currentTranscript.trim() : '';
-    final heardFallbackText = wasListening ? speech.lastRecognizedText.trim() : '';
+    final heardFallbackText = wasListening
+        ? speech.lastRecognizedText.trim()
+        : '';
     final text = postStopText.isNotEmpty
         ? postStopText
         : (preStopText.isNotEmpty

@@ -66,14 +66,11 @@ class _ExerciseCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         onTap: () {
           if (title == 'Listening Exercises') {
             Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ListeningCatalogueScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => ListeningCatalogueScreen()),
             );
           } else if (title == 'Speaking Exercises') {
             Navigator.of(context).push(
@@ -88,12 +85,13 @@ class _ExerciseCard extends StatelessWidget {
           child: Icon(icon, color: color),
         ),
         minLeadingWidth: 40,
-        title: Text(title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle,
-            maxLines: 2, overflow: TextOverflow.ellipsis),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
         trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
       ),
     );

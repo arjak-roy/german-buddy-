@@ -9,6 +9,18 @@ import '../../../../providers/app_providers.dart';
 import '../../buddy/widgets/buddy_mic_button.dart';
 import '../models/pronunciation_item.dart';
 
+class _SegmentTiming {
+  final String label;
+  final int startMs;
+  final int endMs;
+
+  _SegmentTiming({
+    required this.label,
+    required this.startMs,
+    required this.endMs,
+  });
+}
+
 class PronunciationLessonScreen extends ConsumerStatefulWidget {
   final PronunciationItem item;
 
@@ -35,6 +47,88 @@ class _PronunciationLessonScreenState
   List<String> get _segments => widget.item.segments;
   List<_Viseme> get _visemes =>
       _segments.map((segment) => _visemeForSegment(segment)).toList();
+
+  List<PronunciationPhonemeFeedback> _reportPhonemes() {
+    final analysis = ref.read(pronunciationAnalysisProviderNotifier);
+    return analysis.report?.phonemeBreakdown ?? [];
+  }
+
+  List<_SegmentTiming> _segmentTimings() {
+    final phonemes = _reportPhonemes();
+
+    // Heuristic baseline (segment-level) if server timing is not available.
+    final segments = _segments;
+    final fallbackTiming = <_SegmentTiming>[];
+    if (segments.isNotEmpty) {
+      final totalDuration = (500 + segments.length * 180).clamp(700, 2000);
+      final perSegment = (totalDuration / segments.length).round();
+      var current = 0;
+      for (final segment in segments) {
+        final start = current;
+        final end = current + perSegment;
+        current = end;
+        fallbackTiming.add(
+          _SegmentTiming(label: segment, startMs: start, endMs: end),
+        );
+      }
+    }
+
+    // 1) If server provides full phoneme timing, use hybrid best-effort integration
+    final serverTiming = phonemes.where((p) => p.endMs > p.startMs).toList();
+
+    if (serverTiming.isNotEmpty) {
+      final sorted = List<PronunciationPhonemeFeedback>.from(serverTiming)
+        ..sort((a, b) => a.startMs.compareTo(b.startMs));
+
+      // If we can map to segments exactly, we trust server heavily but blend with heuristic.
+      if (sorted.length == segments.length) {
+        const serverWeight = 0.75;
+        const heuristicWeight = 0.25;
+
+        // Convert segment-based fallback for translation
+        final fallbackByIndex = fallbackTiming;
+        final List<_SegmentTiming> hybrid = [];
+
+        for (var i = 0; i < sorted.length; i++) {
+          final server = sorted[i];
+          final heur = fallbackByIndex[i];
+
+          final blendedStart =
+              (server.startMs * serverWeight + heur.startMs * heuristicWeight)
+                  .round();
+          final blendedEnd =
+              (server.endMs * serverWeight + heur.endMs * heuristicWeight)
+                  .round();
+
+          hybrid.add(
+            _SegmentTiming(
+              label: segments[i],
+              startMs: blendedStart,
+              endMs: blendedEnd > blendedStart
+                  ? blendedEnd
+                  : blendedStart + 100,
+            ),
+          );
+        }
+
+        return hybrid;
+      }
+
+      // If server count doesn't match segments, but timing exists, prefer server at phoneme level.
+      return sorted
+          .map(
+            (p) => _SegmentTiming(
+              label: p.phoneme,
+              startMs: p.startMs,
+              endMs: p.endMs,
+            ),
+          )
+          .toList();
+    }
+
+    // 2) fallback
+    return fallbackTiming;
+  }
 
   @override
   void initState() {
@@ -97,10 +191,44 @@ class _PronunciationLessonScreenState
 
   Future<void> _playWithSegments() async {
     _segmentTimer?.cancel();
+
+    final timings = _segmentTimings();
+    if (timings.isNotEmpty) {
+      setState(() => _activeSegmentIndex = 0);
+
+      _segmentTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+
+        final elapsed = timer.tick * 50;
+        final newActive = timings.indexWhere(
+          (s) => elapsed >= s.startMs && elapsed <= s.endMs,
+        );
+
+        if (newActive == -1 && elapsed > timings.last.endMs) {
+          timer.cancel();
+          return;
+        }
+
+        if (newActive != -1) {
+          setState(() {
+            _activeSegmentIndex = newActive;
+          });
+        }
+      });
+
+      await _tts.setSpeechRate(_speechRate);
+      await _tts.stop();
+      await _tts.speak(widget.item.german);
+      return;
+    }
+
+    // very fallback: show segments without timing
     setState(() {
       _activeSegmentIndex = 0;
     });
-
     final segmentCount = _segments.length;
     final perSegmentMs = (950 - (_speechRate * 700)).clamp(250, 900).toInt();
     var tick = 0;
@@ -118,7 +246,6 @@ class _PronunciationLessonScreenState
         timer.cancel();
         return;
       }
-
       setState(() {
         _activeSegmentIndex = tick;
       });
@@ -370,55 +497,64 @@ class _PronunciationLessonScreenState
                           style: theme.textTheme.bodySmall,
                         ),
                         const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: List<Widget>.generate(_segments.length, (
-                            index,
-                          ) {
-                            final active =
-                                _isPlaying && index == _activeSegmentIndex;
-                            final passed =
-                                _isPlaying && index < _activeSegmentIndex;
-                            final background = active
-                                ? const Color(0xFF16A34A)
-                                : (passed
-                                      ? const Color(0xFF0284C7)
-                                      : const Color(0xFFE2E8F0));
-                            final foreground = active || passed
-                                ? Colors.white
-                                : const Color(0xFF334155);
+                        Builder(
+                          builder: (context) {
+                            final timings = _segmentTimings();
+                            final chunks = timings.isNotEmpty
+                                ? timings.map((t) => t.label).toList()
+                                : _segments;
 
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: background,
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: active
-                                    ? const [
-                                        BoxShadow(
-                                          color: Color(0x3316A34A),
-                                          blurRadius: 14,
-                                          offset: Offset(0, 4),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Text(
-                                _segments[index],
-                                style: TextStyle(
-                                  color: foreground,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.8,
-                                  fontFeatures: const [],
-                                ),
-                              ),
+                            return Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: List<Widget>.generate(chunks.length, (
+                                index,
+                              ) {
+                                final active =
+                                    _isPlaying && index == _activeSegmentIndex;
+                                final passed =
+                                    _isPlaying && index < _activeSegmentIndex;
+                                final background = active
+                                    ? const Color(0xFF16A34A)
+                                    : (passed
+                                          ? const Color(0xFF0284C7)
+                                          : const Color(0xFFE2E8F0));
+                                final foreground = active || passed
+                                    ? Colors.white
+                                    : const Color(0xFF334155);
+
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: background,
+                                    borderRadius: BorderRadius.circular(999),
+                                    boxShadow: active
+                                        ? const [
+                                            BoxShadow(
+                                              color: Color(0x3316A34A),
+                                              blurRadius: 14,
+                                              offset: Offset(0, 4),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Text(
+                                    chunks[index],
+                                    style: TextStyle(
+                                      color: foreground,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.8,
+                                      fontFeatures: const [],
+                                    ),
+                                  ),
+                                );
+                              }),
                             );
-                          }),
+                          },
                         ),
                       ],
                     ),
@@ -615,7 +751,10 @@ class _PronunciationLessonScreenState
 enum _Viseme { neutral, openA, rounded, spread, consonant, tight }
 
 _Viseme _visemeForSegment(String segment) {
-  final normalized = segment.toLowerCase().replaceAll(RegExp(r'[^a-zA-Zäöüß]'), '');
+  final normalized = segment.toLowerCase().replaceAll(
+    RegExp(r'[^a-zA-Zäöüß]'),
+    '',
+  );
   if (normalized.isEmpty) return _Viseme.neutral;
 
   if (normalized.contains('sch') ||
@@ -703,7 +842,9 @@ class _AnimatedLips extends StatelessWidget {
           border: Border.all(color: const Color(0xFFFDA4AF)),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFB7185).withOpacity(isPlaying ? 0.22 : 0.14),
+              color: const Color(
+                0xFFFB7185,
+              ).withOpacity(isPlaying ? 0.22 : 0.14),
               blurRadius: 16,
               offset: const Offset(0, 8),
             ),
@@ -711,11 +852,7 @@ class _AnimatedLips extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Positioned(
-              left: 24,
-              top: 44,
-              child: _CheekGlow(active: isPlaying),
-            ),
+            Positioned(left: 24, top: 44, child: _CheekGlow(active: isPlaying)),
             Positioned(
               right: 24,
               top: 44,
@@ -775,10 +912,22 @@ class _LipsPainter extends CustomPainter {
     final opening = size.height * pose.openFactor;
     final cornerLift = size.height * pose.cornerLift;
 
-    final leftCorner = Offset(center.dx - (lipWidth / 2), center.dy + cornerLift);
-    final rightCorner = Offset(center.dx + (lipWidth / 2), center.dy + cornerLift);
-    final topPeak = Offset(center.dx, center.dy - opening - (size.height * 0.07));
-    final bottomDip = Offset(center.dx, center.dy + opening + (size.height * 0.06));
+    final leftCorner = Offset(
+      center.dx - (lipWidth / 2),
+      center.dy + cornerLift,
+    );
+    final rightCorner = Offset(
+      center.dx + (lipWidth / 2),
+      center.dy + cornerLift,
+    );
+    final topPeak = Offset(
+      center.dx,
+      center.dy - opening - (size.height * 0.07),
+    );
+    final bottomDip = Offset(
+      center.dx,
+      center.dy + opening + (size.height * 0.06),
+    );
 
     final upperLip = Path()
       ..moveTo(leftCorner.dx, leftCorner.dy)
@@ -843,24 +992,38 @@ class _LipsPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final upperFill = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          const Color(0xFFFB7185).withOpacity(isPlaying ? 0.95 : 0.78),
-          const Color(0xFFE11D48).withOpacity(isPlaying ? 0.92 : 0.74),
-        ],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromCenter(center: center, width: lipWidth, height: size.height * 0.24));
+      ..shader =
+          LinearGradient(
+            colors: [
+              const Color(0xFFFB7185).withOpacity(isPlaying ? 0.95 : 0.78),
+              const Color(0xFFE11D48).withOpacity(isPlaying ? 0.92 : 0.74),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ).createShader(
+            Rect.fromCenter(
+              center: center,
+              width: lipWidth,
+              height: size.height * 0.24,
+            ),
+          );
 
     final lowerFill = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          const Color(0xFFFB7185).withOpacity(isPlaying ? 0.88 : 0.72),
-          const Color(0xFFBE123C).withOpacity(isPlaying ? 0.86 : 0.68),
-        ],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromCenter(center: center, width: lipWidth, height: size.height * 0.28));
+      ..shader =
+          LinearGradient(
+            colors: [
+              const Color(0xFFFB7185).withOpacity(isPlaying ? 0.88 : 0.72),
+              const Color(0xFFBE123C).withOpacity(isPlaying ? 0.86 : 0.68),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ).createShader(
+            Rect.fromCenter(
+              center: center,
+              width: lipWidth,
+              height: size.height * 0.28,
+            ),
+          );
 
     canvas.drawPath(lowerLip, lowerFill);
     canvas.drawPath(upperLip, upperFill);
@@ -897,7 +1060,10 @@ class _LipsPainter extends CustomPainter {
       );
 
       final tongueRect = Rect.fromCenter(
-        center: Offset(mouthRect.center.dx, mouthRect.bottom - (mouthRect.height * 0.24)),
+        center: Offset(
+          mouthRect.center.dx,
+          mouthRect.bottom - (mouthRect.height * 0.24),
+        ),
         width: mouthRect.width * 0.58,
         height: mouthRect.height * 0.32,
       );
@@ -915,7 +1081,10 @@ class _LipsPainter extends CustomPainter {
       ..color = Colors.white.withOpacity(isPlaying ? 0.26 : 0.18);
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(center.dx - (lipWidth * 0.17), center.dy - (opening * 0.58)),
+        center: Offset(
+          center.dx - (lipWidth * 0.17),
+          center.dy - (opening * 0.58),
+        ),
         width: lipWidth * 0.24,
         height: 6,
       ),
@@ -1454,9 +1623,7 @@ class _RetryHintCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         item,
-                        style: TextStyle(
-                          color: const Color(0xFF78350F),
-                        ),
+                        style: TextStyle(color: const Color(0xFF78350F)),
                       ),
                     ),
                   ],
