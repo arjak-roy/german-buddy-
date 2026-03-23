@@ -3,7 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../ui/features/speaking/models/speaking_exercise_state.dart';
 import '../core/constants/prompts.dart';
 import '../data/services/gemini_service.dart';
-
+import '../ui/features/speaking/engine/speaking_engine.dart';
 import '../ui/features/speaking/engine/speaking_engine_models.dart';
 
 part 'speaking_session_provider.g.dart';
@@ -20,6 +20,25 @@ class SpeakingSessionState {
   final String latestWordConfidenceJson;
   final SpeakingExerciseState uiState;
 
+  // ── Sequence-aware matching state ──
+  /// Index of the next expected word in the target token list.
+  final int currentWordPointer;
+
+  /// Indices (into the target token list) that have been matched *in order*.
+  final Set<int> matchedWordIndices;
+
+  /// Per-word confidence for the current sentence (token → confidence).
+  final Map<String, double> wordConfidences;
+
+  /// Live match-rate for the current sentence (0.0–1.0).
+  final double matchRate;
+
+  /// Live average word-confidence for matched words (0.0–1.0).
+  final double averageWordConfidence;
+
+  /// Per-word phonetic/articulation score (0.0–1.0).
+  final Map<String, double> phoneticScores;
+
   SpeakingSessionState({
     required this.script,
     this.currentSentenceIndex = 0,
@@ -31,6 +50,12 @@ class SpeakingSessionState {
     this.sentenceWordConfidence = const {},
     this.latestWordConfidenceJson = '{}',
     this.uiState = const SpeakingExerciseInitial(),
+    this.currentWordPointer = 0,
+    this.matchedWordIndices = const <int>{},
+    this.wordConfidences = const <String, double>{},
+    this.matchRate = 0.0,
+    this.averageWordConfidence = 0.0,
+    this.phoneticScores = const <String, double>{},
   });
 
   bool get hasAttemptedCurrentSentence => attemptedSentenceIndices.contains(currentSentenceIndex);
@@ -76,6 +101,12 @@ class SpeakingSessionState {
     Map<int, Map<String, dynamic>>? sentenceWordConfidence,
     String? latestWordConfidenceJson,
     SpeakingExerciseState? uiState,
+    int? currentWordPointer,
+    Set<int>? matchedWordIndices,
+    Map<String, double>? wordConfidences,
+    double? matchRate,
+    double? averageWordConfidence,
+    Map<String, double>? phoneticScores,
   }) {
     return SpeakingSessionState(
       script: script ?? this.script,
@@ -88,6 +119,12 @@ class SpeakingSessionState {
       sentenceWordConfidence: sentenceWordConfidence ?? this.sentenceWordConfidence,
       latestWordConfidenceJson: latestWordConfidenceJson ?? this.latestWordConfidenceJson,
       uiState: uiState ?? this.uiState,
+      currentWordPointer: currentWordPointer ?? this.currentWordPointer,
+      matchedWordIndices: matchedWordIndices ?? this.matchedWordIndices,
+      wordConfidences: wordConfidences ?? this.wordConfidences,
+      matchRate: matchRate ?? this.matchRate,
+      averageWordConfidence: averageWordConfidence ?? this.averageWordConfidence,
+      phoneticScores: phoneticScores ?? this.phoneticScores,
     );
   }
 }
@@ -124,6 +161,11 @@ class SpeakingSessionNotifier extends _$SpeakingSessionNotifier {
     state = state.copyWith(
       currentSentenceIndex: state.currentSentenceIndex - 1,
       isCompleted: false,
+      currentWordPointer: 0,
+      matchedWordIndices: const <int>{},
+      wordConfidences: const <String, double>{},
+      matchRate: 0.0,
+      averageWordConfidence: 0.0,
     );
   }
 
@@ -138,6 +180,11 @@ class SpeakingSessionNotifier extends _$SpeakingSessionNotifier {
     state = state.copyWith(
       currentSentenceIndex: state.currentSentenceIndex + 1,
       isCompleted: false,
+      currentWordPointer: 0,
+      matchedWordIndices: const <int>{},
+      wordConfidences: const <String, double>{},
+      matchRate: 0.0,
+      averageWordConfidence: 0.0,
     );
     return true;
   }
@@ -152,6 +199,158 @@ class SpeakingSessionNotifier extends _$SpeakingSessionNotifier {
   // Cache key for diffing — skip update when nothing has changed.
   String _lastReportKey = '';
 
+  /// Sequence-aware transcript processing.
+  ///
+  /// Instead of a bag-of-words `Set.contains`, this method walks a pointer
+  /// through the target tokens.  A spoken word only "matches" if it appears
+  /// at or near the current pointer position.  Once matched the pointer
+  /// advances, enforcing correct word order.
+  void processTranscript({
+    required List<String> transcripts,
+    required double confidence,
+    required Map<String, double> liveWordConfidence,
+  }) {
+    final sentence = state.currentSentence;
+    final targetTokens = _tokenizeNonIgnored(sentence);
+    if (targetTokens.isEmpty || transcripts.isEmpty) return;
+
+    // Filter to unique transcripts
+    final uniqueTranscripts = transcripts.toSet().toList();
+
+    // Build a cheap diff key — skip update when nothing changed.
+    final reportKey = '${state.currentSentenceIndex}|'
+        '${uniqueTranscripts.join('|')}|'
+        '${confidence.toStringAsFixed(2)}|'
+        '${liveWordConfidence.entries.map((e) => '${e.key}:${e.value.toStringAsFixed(2)}').join(',')}';
+    if (reportKey == _lastReportKey) return;
+    _lastReportKey = reportKey;
+
+    var bestPointer = state.currentWordPointer;
+    var bestMatched = state.matchedWordIndices;
+    var bestConfidences = state.wordConfidences;
+    var bestPhoneticScores = state.phoneticScores;
+
+    for (final transcript in uniqueTranscripts) {
+      final spokenTokens = _tokenizeAll(transcript);
+      final newMatched = Set<int>.from(state.matchedWordIndices);
+      final newConfidences = Map<String, double>.from(state.wordConfidences);
+      final newPhoneticScores = Map<String, double>.from(state.phoneticScores);
+      var pointer = state.currentWordPointer;
+
+      for (final spoken in spokenTokens) {
+        if (pointer >= targetTokens.length) break;
+
+        int? matchedIndex;
+        // Lookahead max 2 words (i.e. tolerate if user skipped 1 or 2 words)
+        for (int i = pointer; i < targetTokens.length && i <= pointer + 2; i++) {
+          final expectedToken = targetTokens[i];
+          final expected = expectedToken.normalized;
+          final allowedDist = expected.length > 5 ? 2 : (expected.length > 3 ? 1 : 0);
+
+          if (spoken == expected || _levenshtein(spoken, expected) <= allowedDist) {
+            matchedIndex = i;
+            break;
+          }
+        }
+
+        if (matchedIndex != null) {
+          final expectedToken = targetTokens[matchedIndex];
+          final expected = expectedToken.normalized;
+          newMatched.add(matchedIndex);
+          
+          final dist = _levenshtein(spoken, expected);
+          
+          // --- REAL-TIME ARTICULATION (PHONETIC) SCORE ---
+          // Based on Option B: Live Letter-by-Letter Exactness.
+          final double phoneticScore;
+          if (expected.isEmpty || spoken == expected) {
+            phoneticScore = 1.0;
+          } else {
+            // Normalized Levenshtein distance: 0.0 (perfect) to 1.0 (completely different)
+            // Clarity is the inverse.
+            final dNorm = dist / expected.length;
+            phoneticScore = (1.0 - dNorm).clamp(0.0, 1.0);
+          }
+          newPhoneticScores[expected] = phoneticScore;
+          
+          // --- RECOGNITION CONFIDENCE ---
+          final sttConf = liveWordConfidence[expected] ?? liveWordConfidence[spoken] ?? confidence;
+          
+          // Sequence bonus (if matched in order, it's very stable)
+          final double sequenceBonus = (dist == 0) ? 0.15 : (dist == 1 ? 0.05 : 0.0);
+          final double sanityFloor = (dist == 0) ? 0.70 : (dist == 1 ? 0.45 : 0.30);
+          
+          newConfidences[expected] = (sttConf + sequenceBonus).clamp(sanityFloor, 1.0);
+          
+          pointer = matchedIndex + 1;
+        }
+      }
+
+      if (newMatched.length > bestMatched.length) {
+        bestMatched = newMatched;
+        bestPointer = pointer;
+        bestConfidences = newConfidences;
+        bestPhoneticScores = newPhoneticScores;
+      }
+    }
+
+    // Compute live stats from the best matched sequence
+    final matchRate = bestMatched.length / targetTokens.length;
+    final matchedConfs = bestMatched
+        .map((i) => bestConfidences[targetTokens[i].normalized] ?? confidence)
+        .toList();
+    final avgConf = matchedConfs.isEmpty
+        ? 0.0
+        : matchedConfs.reduce((a, b) => a + b) / matchedConfs.length;
+
+    // Mark sentence as attempted if any words matched.
+    final newAttempted = Set<int>.from(state.attemptedSentenceIndices);
+    if (bestMatched.isNotEmpty) {
+      newAttempted.add(state.currentSentenceIndex);
+    }
+
+    // Build the confidence report for Gemini analysis.
+    final report = {
+      'sentenceIndex': state.currentSentenceIndex,
+      'sentenceText': sentence,
+      'words': List.generate(targetTokens.length, (i) {
+        final word = targetTokens[i].normalized;
+        final matched = bestMatched.contains(i);
+        final wc = matched ? (bestConfidences[word] ?? confidence) : 0.0;
+        return {
+          'word': word,
+          'matched': matched,
+          'confidence': wc,
+          'band': _confidenceBand(wc),
+        };
+      }),
+    };
+
+    final newSentenceConfidence =
+        Map<int, Map<String, dynamic>>.from(state.sentenceWordConfidence);
+    newSentenceConfidence[state.currentSentenceIndex] = report;
+
+    final orderedSentences = newSentenceConfidence.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final newJson = jsonEncode({
+      'exercise': item.title,
+      'sentences': orderedSentences.map((e) => e.value).toList(),
+    });
+
+    state = state.copyWith(
+      currentWordPointer: bestPointer,
+      matchedWordIndices: bestMatched,
+      wordConfidences: bestConfidences,
+      phoneticScores: bestPhoneticScores,
+      matchRate: matchRate.clamp(0.0, 1.0),
+      averageWordConfidence: avgConf.clamp(0.0, 1.0),
+      attemptedSentenceIndices: newAttempted,
+      sentenceWordConfidence: newSentenceConfidence,
+      latestWordConfidenceJson: newJson,
+    );
+  }
+
+  /// Backward-compatible wrapper — delegates to [processTranscript].
   void updateWordConfidenceReport({
     required String sentence,
     required List<String> targetTokens,
@@ -159,49 +358,53 @@ class SpeakingSessionNotifier extends _$SpeakingSessionNotifier {
     required double confidence,
     required Map<String, double> liveWordConfidence,
   }) {
-    // FIX 5: Build a cheap diff key from spoken tokens + truncated confidence.
-    // Skip the update if nothing meaningful changed since the last invocation.
-    final reportKey = '${state.currentSentenceIndex}|'
-        '${spokenTokens.toList()..sort()}|'
-        '${confidence.toStringAsFixed(2)}|'
-        '${liveWordConfidence.entries.map((e) => '${e.key}:${e.value.toStringAsFixed(2)}').join(',')}';
-    if (reportKey == _lastReportKey) return;
-    _lastReportKey = reportKey;
-
-    final newSet = Set<int>.from(state.attemptedSentenceIndices);
-    if (spokenTokens.isNotEmpty) {
-      newSet.add(state.currentSentenceIndex);
-    }
-
-    final report = {
-      'sentenceIndex': state.currentSentenceIndex,
-      'sentenceText': sentence,
-      'words': targetTokens.map((word) {
-        final matched = spokenTokens.contains(word);
-        final wordConfidence = matched ? (liveWordConfidence[word] ?? confidence) : 0.0;
-        return {
-          'word': word,
-          'matched': matched,
-          'confidence': wordConfidence,
-          'band': _confidenceBand(wordConfidence),
-        };
-      }).toList(),
-    };
-
-    final newConfidence = Map<int, Map<String, dynamic>>.from(state.sentenceWordConfidence);
-    newConfidence[state.currentSentenceIndex] = report;
-
-    final orderedSentences = newConfidence.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-    final newJson = jsonEncode({
-      'exercise': item.title,
-      'sentences': orderedSentences.map((entry) => entry.value).toList(),
-    });
-
-    state = state.copyWith(
-      attemptedSentenceIndices: newSet,
-      sentenceWordConfidence: newConfidence,
-      latestWordConfidenceJson: newJson,
+    // Reconstruct a pseudo-transcript from the spoken tokens so the
+    // pointer-based logic can consume them.
+    processTranscript(
+      transcripts: [spokenTokens.join(' ')],
+      confidence: confidence,
+      liveWordConfidence: liveWordConfidence,
     );
+  }
+
+  // ── Helpers ──
+
+  List<SpeakingWordToken> _tokenizeNonIgnored(String input) {
+    final phonetic = (item.phoneticScript != null &&
+            state.currentSentenceIndex < item.phoneticScript!.length)
+        ? item.phoneticScript![state.currentSentenceIndex]
+        : null;
+    return SpeakingEngine.tokenizeStatic(input, item.ignoreWords,
+            phoneticInput: phonetic)
+        .where((t) => !t.ignored && t.normalized.isNotEmpty)
+        .toList();
+  }
+
+  List<String> _tokenizeAll(String input) {
+    return SpeakingEngine.tokenizeStatic(input, item.ignoreWords)
+        .where((t) => !t.ignored)
+        .map((t) => t.normalized)
+        .where((t) => t.isNotEmpty)
+        .toList();
+  }
+
+  static int _levenshtein(String a, String b) {
+    if (a == b) return 0;
+    if (a.isEmpty) return b.length;
+    if (b.isEmpty) return a.length;
+    final rows = a.length + 1;
+    final cols = b.length + 1;
+    final d = List<List<int>>.generate(rows, (_) => List<int>.filled(cols, 0));
+    for (var i = 0; i < rows; i++) { d[i][0] = i; }
+    for (var j = 0; j < cols; j++) { d[0][j] = j; }
+    for (var i = 1; i < rows; i++) {
+      for (var j = 1; j < cols; j++) {
+        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
+        d[i][j] = [d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost]
+            .reduce((min, v) => v < min ? v : min);
+      }
+    }
+    return d[a.length][b.length];
   }
 
   String _confidenceBand(double confidence) {

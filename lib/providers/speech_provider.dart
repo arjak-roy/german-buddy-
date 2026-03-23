@@ -148,6 +148,7 @@ class SpeechProvider extends ChangeNotifier {
 
   String _recognized = '';
   String _finalRecognized = '';
+  List<String> _currentAlternates = [];
   double? _lastConfidence;
   final Map<String, double> _liveWordConfidence = {};
   final Map<String, double> _wordStability = {};
@@ -185,6 +186,7 @@ class SpeechProvider extends ChangeNotifier {
   String get confirmedText => _finalRecognized;
   String get currentTranscript =>
       _finalRecognized.isNotEmpty ? _finalRecognized : _recognized;
+  List<String> get currentAlternates => List.unmodifiable(_currentAlternates);
   bool get hasConfirmedSentence => _finalRecognized.isNotEmpty;
   String get activeLocaleId => isGerman ? _germanLocaleId : _englishLocaleId;
   String get lastStatus => _lastStatus;
@@ -309,6 +311,7 @@ class SpeechProvider extends ChangeNotifier {
     _lastStatus = 'starting';
     _recognized = '';
     _finalRecognized = '';
+    _currentAlternates.clear();
     _lastConfidence = null;
     _liveWordConfidence.clear();
     _wordStability.clear();
@@ -342,6 +345,13 @@ class SpeechProvider extends ChangeNotifier {
           final transcript = _postProcessTranscript(words);
           final combinedTranscript = _mergeWithSessionPrefix(transcript);
           _recognized = combinedTranscript;
+          
+          final alternates = result.alternates
+            .map((e) => _mergeWithSessionPrefix(_postProcessTranscript(e.recognizedWords.trim())))
+            .where((t) => t.isNotEmpty && t != combinedTranscript)
+            .toList();
+          _currentAlternates = alternates;
+
           _resultTick += 1;
           _lastResultAt = DateTime.now();
           if (result.hasConfidenceRating) {
@@ -415,6 +425,7 @@ class SpeechProvider extends ChangeNotifier {
     _sessionGen++;
     _recognized = '';
     _finalRecognized = '';
+    _currentAlternates.clear();
     _lastConfidence = null;
     _liveWordConfidence.clear();
     _wordStability.clear();
@@ -439,30 +450,30 @@ class SpeechProvider extends ChangeNotifier {
     for (final token in tokens) {
       final previousStability = _wordStability[token] ?? 0.0;
       final seenBefore = _wordLastSeenTick.containsKey(token);
-      // FIX 1: Returning words get a bigger boost than first-seen words.
-      final stabilityBoost = seenBefore ? 0.18 : 0.09;
+      // BOOST: Stability grows faster (0.22/0.14) so words quickly move out of "low" zone.
+      final stabilityBoost = seenBefore ? 0.22 : 0.14;
       final stability = (previousStability + stabilityBoost).clamp(0.0, 1.0);
       _wordStability[token] = stability;
       _wordLastSeenTick[token] = _resultTick;
 
-      // FIX 3: Lower floor so noise words don't immediately appear "medium".
-      final inferredWordConfidence = (0.08 + (stability * 0.82)).clamp(
+      // BOOST: Higher base floor (0.35) so even a first-seen word starts in a visible "low/medium" range.
+      final inferredWordConfidence = (0.35 + (stability * 0.65)).clamp(
         0.0,
         1.0,
       );
-      // FIX 7: Favor stability (70%) over utterance-level confidence (30%),
-      // since the utterance confidence reflects the entire phrase, not this word.
+      // BOOST: Weighted more towards real-time utterance confidence (60%) for dynamism.
       final nextConfidence = (confidence != null && confidence > 0.0)
-          ? ((confidence * 0.3) + (inferredWordConfidence * 0.7)).clamp(
+          ? ((confidence * 0.6) + (inferredWordConfidence * 0.4)).clamp(
               0.0,
               1.0,
             )
           : inferredWordConfidence;
 
       final previous = _liveWordConfidence[token];
+      // Responsive smoothing (favor current over history).
       _liveWordConfidence[token] = previous == null
           ? nextConfidence
-          : ((previous * 0.55) + (nextConfidence * 0.45)).clamp(0.0, 1.0);
+          : ((previous * 0.4) + (nextConfidence * 0.6)).clamp(0.0, 1.0);
     }
 
     // FIX 4 + FIX 8: Time-based decay — decay faster for tokens absent longer.

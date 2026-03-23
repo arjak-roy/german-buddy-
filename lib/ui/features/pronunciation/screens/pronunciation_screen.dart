@@ -4,9 +4,6 @@ import 'pronunciation_lesson_screen.dart';
 // import removed: '../../listening/screens/listening_catalogue_screen.dart';
 
 class PronunciationScreen extends StatefulWidget {
-  static const _panelTitle = Color(0xFF0F172A);
-  static const _panelBody = Color(0xFF334155);
-
   final bool embedded;
 
   const PronunciationScreen({super.key, this.embedded = false});

@@ -5,7 +5,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../../../../providers/app_providers.dart';
 import '../../../../providers/speaking_session_provider.dart';
 import '../../../../providers/speech_provider.dart';
-import '../../../../providers/speaking_engine_provider.dart';
 import '../../pronunciation/models/pronunciation_item.dart';
 import '../../pronunciation/screens/pronunciation_lesson_screen.dart';
 import '../../pronunciation/widgets/pronunciation_mini_lab.dart';
@@ -136,14 +135,7 @@ class _SpeakingExerciseScreenState extends ConsumerState<SpeakingExerciseScreen>
     )).where((span) => span.raw.isNotEmpty).toList();
   }
 
-  double _matchRate(List<String> target, Set<String> spoken) {
-    if (target.isEmpty) return 0;
-    var matched = 0;
-    for (final token in target) {
-      if (spoken.contains(token)) matched += 1;
-    }
-    return matched / target.length;
-  }
+
 
   Color _wordColor({required bool matched, required double confidence}) {
     if (!matched) return Colors.grey.shade500;
@@ -479,45 +471,30 @@ class _SpeakingExerciseScreenState extends ConsumerState<SpeakingExerciseScreen>
               final isAnalysisCard = practiceState.isCompleted;
               final sentence = practiceState.currentSentence;
               final sentenceWordSpans = _wordSpans(sentence);
-              final engine = ref.watch(speakingEngineProvider(widget.item));
-              final targetTokens = engine
-                  .tokenize(sentence)
-                  .where((t) => !t.ignored)
-                  .map((t) => t.normalized)
-                  .where((token) => token.isNotEmpty)
-                  .toList();
-              final spokenTokens = engine
-                  .tokenize(speech.currentTranscript)
-                  .where((t) => !t.ignored)
-                  .map((t) => t.normalized)
-                  .toSet();
               final confidence = (speech.lastConfidence ?? 0.0).clamp(0.0, 1.0);
               final liveWordConfidence = speech.liveWordConfidence;
-              final matchedConfidences = targetTokens
-                  .where(spokenTokens.contains)
-                  .map((word) => speech.confidenceForWord(word) ?? confidence)
-                  .toList();
-              final averageWordConfidence = matchedConfidences.isEmpty
-                  ? confidence
-                  : matchedConfidences.reduce((a, b) => a + b) / matchedConfidences.length;
-                  
+
+              // Delegate matching to the notifier (sequence-aware).
               if (!isAnalysisCard) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  practiceNotifier.updateWordConfidenceReport(
-                    sentence: sentence,
-                    targetTokens: targetTokens,
-                    spokenTokens: spokenTokens,
+                  if (!mounted) return;
+                  practiceNotifier.processTranscript(
+                    transcripts: [speech.currentTranscript, ...speech.currentAlternates],
                     confidence: confidence,
                     liveWordConfidence: liveWordConfidence,
                   );
                 });
               }
-              
-              final rate = _matchRate(targetTokens, spokenTokens);
+
+              // Read pre-computed stats from state.
+              final rate = practiceState.matchRate;
+              final averageWordConfidence = practiceState.averageWordConfidence;
+              final matchedIndices = practiceState.matchedWordIndices;
+              final wordConfidences = practiceState.wordConfidences;
               final isLastSentence = practiceState.currentSentenceIndex == practiceState.script.length - 1;
               final nextLocked = isLastSentence && !practiceState.hasAttemptedCurrentSentence;
               final showEmojiCoach = !isAnalysisCard &&
-                  (speech.isListening || practiceState.isTtsSpeaking || spokenTokens.isNotEmpty);
+                  (speech.isListening || practiceState.isTtsSpeaking || matchedIndices.isNotEmpty);
 
               if (isAnalysisCard) {
                 final payload = practiceState.latestWordConfidenceJson.trim();
@@ -655,11 +632,36 @@ class _SpeakingExerciseScreenState extends ConsumerState<SpeakingExerciseScreen>
                                       (index) {
                                         final span = sentenceWordSpans[index];
                                         final isIgnored = _isIgnoredWordSpan(span);
-                                        final matched = !isIgnored && spokenTokens.contains(span.normalized);
-                                        final wordConfidence = (isIgnored || !matched)
+
+                                        // Map this span index to its position
+                                        // in the non-ignored target token list.
+                                        int nonIgnoredIdx = -1;
+                                        if (!isIgnored) {
+                                          int counter = 0;
+                                          for (var i = 0; i <= index && i < sentenceWordSpans.length; i++) {
+                                            if (!_isIgnoredWordSpan(sentenceWordSpans[i])) {
+                                              if (i == index) {
+                                                nonIgnoredIdx = counter;
+                                                break;
+                                              }
+                                              counter++;
+                                            }
+                                          }
+                                        }
+
+                                        final matched = nonIgnoredIdx >= 0 && matchedIndices.contains(nonIgnoredIdx);
+                                        final wordConf = (isIgnored || !matched)
                                             ? 0.0
-                                            : (speech.confidenceForWord(span.normalized) ?? confidence);
-                                        final color = isIgnored ? Colors.blueGrey.shade600 : _wordColor(matched: matched, confidence: wordConfidence);
+                                            : (wordConfidences[span.normalized] ?? confidence);
+                                        
+                                        final phoneticScore = (isIgnored || !matched)
+                                            ? 0.0
+                                            : (practiceState.phoneticScores[span.normalized] ?? 0.0);
+
+                                        // Blend for the overall UI color: 40% recognition, 60% articulation (Option B)
+                                        final combinedScore = matched ? ((wordConf * 0.4) + (phoneticScore * 0.6)) : 0.0;
+
+                                        final color = isIgnored ? Colors.blueGrey.shade600 : _wordColor(matched: matched, confidence: combinedScore);
                                         final isTtsWord = practiceState.isTtsSpeaking && index == practiceState.ttsWordIndex;
                                         final maxChipWidth = (MediaQuery.of(context).size.width * 0.28).clamp(86.0, 150.0);
                                         return InkWell(
@@ -696,6 +698,48 @@ class _SpeakingExerciseScreenState extends ConsumerState<SpeakingExerciseScreen>
                                                     style: theme.textTheme.labelSmall?.copyWith(
                                                       color: colors.onSurfaceVariant,
                                                       fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                if (matched && !isIgnored && !isTtsWord)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 6),
+                                                    child: Column(
+                                                      children: [
+                                                        Container(
+                                                          height: 2.5,
+                                                          width: 45,
+                                                          decoration: BoxDecoration(
+                                                            color: color.withAlpha(40),
+                                                            borderRadius: BorderRadius.circular(2),
+                                                          ),
+                                                          child: FractionallySizedBox(
+                                                            alignment: Alignment.centerLeft,
+                                                            widthFactor: phoneticScore.clamp(0.05, 1.0),
+                                                            child: Container(
+                                                              decoration: BoxDecoration(
+                                                                color: color,
+                                                                borderRadius: BorderRadius.circular(2),
+                                                                boxShadow: [
+                                                                  BoxShadow(
+                                                                    color: color.withAlpha(100),
+                                                                    blurRadius: 2,
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 2),
+                                                        Text(
+                                                          'CLARITY',
+                                                          style: TextStyle(
+                                                            fontSize: 7,
+                                                            fontWeight: FontWeight.w900,
+                                                            color: color.withAlpha(180),
+                                                            letterSpacing: 0.5,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
                                               ],

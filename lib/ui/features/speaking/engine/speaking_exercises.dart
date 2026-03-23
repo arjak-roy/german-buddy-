@@ -87,6 +87,23 @@ const _orderingCoffeeWordTranslations = {
 
 const _orderingCoffeeIgnoredWords = {'your name', '...'};
 
+const _introduceYourselfPhonetic = [
+  'ˈhaloː ɪç ˈhaɪsə',
+  'ɪç ˈkɔmə aʊs ˈɪndi̯ən ʊnt ˈvoːnə jɛtst ɪn bɛrˈliːn',
+  'ɪç ˈlɛrnə dɔʏtʃ vaɪl ɪç hiːr ˈarbaitən ˈmœçtə',
+];
+
+const _orderingCoffeePhonetic = [
+  'ˈhaloː ɪç ˈmœçtə ˈaɪnən ˈkafeː bəˈʃtɛlən',
+  'ɪç ˈneːmə ˈaɪnən kapʊˈtʃiːnoː ˈbɪtə',
+  'zɔnst nɔx ˈɛtvas',
+  'naɪn ˈdaŋkə das ɪst ˈaləs',
+  'viː fiːl maxt das',
+  'das maxt draɪ ˈfʏnftsɪç ˈɔʏroː',
+  'hiːr ɪst das ɡɛlt',
+  'ˈdaŋkə ʃøːn aʊf ˈviːdɐˌzeːən',
+];
+
 final defaultSpeakingExercises = <SpeakingExercise>[
   const SpeakingExercise(
     id: 'introduce-yourself',
@@ -100,6 +117,7 @@ final defaultSpeakingExercises = <SpeakingExercise>[
     prompt: 'Say your name, where you are from and what you do.',
     usefulPhrases: ['Ich heiße …', 'Ich komme aus …', 'Ich bin … von Beruf.'],
     spokenName: 'Arjak',
+    phoneticScript: _introduceYourselfPhonetic,
   ),
   const SpeakingExercise(
     id: 'ordering-coffee',
@@ -112,5 +130,6 @@ final defaultSpeakingExercises = <SpeakingExercise>[
     prompt: 'Say your name, where you are from and what you do.',
     usefulPhrases: ['Ich heiße …', 'Ich komme aus …', 'Ich bin … von Beruf.'],
     spokenName: 'Arjak',
+    phoneticScript: _orderingCoffeePhonetic,
   ),
 ];

@@ -77,10 +77,14 @@ class SpeakingEngine {
     return tokens.join(' ');
   }
 
-  List<SpeakingWordToken> tokenize(String input) {
+  List<SpeakingWordToken> tokenize(String input, {String? phoneticInput}) {
     final rawTokens = RegExp(
       r'\[[^\]]+\]|[^\s]+',
     ).allMatches(input).map((m) => m.group(0)!).toList();
+
+    final rawPhoneticTokens = phoneticInput != null
+        ? phoneticInput.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList()
+        : <String>[];
 
     final normalizedIgnore = ignoreWords
         .map(normalizeToken)
@@ -93,14 +97,21 @@ class SpeakingEngine {
 
     final tokens = <SpeakingWordToken>[];
 
-    for (var raw in rawTokens) {
+    for (var i = 0; i < rawTokens.length; i++) {
+      final raw = rawTokens[i];
       final normalized = normalizeToken(raw);
       if (normalized.isEmpty) continue;
+
+      // Try to associate a phonetic string if available.
+      // Note: This simple zip assumes 1-to-1 word alignment.
+      final phonetic = (i < rawPhoneticTokens.length) ? rawPhoneticTokens[i] : null;
+
       tokens.add(
         SpeakingWordToken(
           raw: raw,
           normalized: normalized,
           ignored: normalizedIgnore.contains(normalized),
+          phonetic: phonetic,
         ),
       );
     }
@@ -122,6 +133,7 @@ class SpeakingEngine {
                 raw: tokens[i + j].raw,
                 normalized: tokens[i + j].normalized,
                 ignored: true,
+                phonetic: tokens[i + j].phonetic,
               );
             }
           }
@@ -133,6 +145,95 @@ class SpeakingEngine {
   }
 
   List<SpeakingWordToken> get sentenceTokens => tokenize(currentSentence);
+
+  /// Static tokenizer for use outside an engine instance (e.g. from providers).
+  static List<SpeakingWordToken> tokenizeStatic(
+    String input,
+    Set<String> ignoreWords, {
+    String? phoneticInput,
+  }) {
+    final rawTokens = RegExp(
+      r'\[[^\]]+\]|[^\s]+',
+    ).allMatches(input).map((m) => m.group(0)!).toList();
+
+    final rawPhoneticTokens = phoneticInput != null
+        ? phoneticInput.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList()
+        : <String>[];
+
+    final normalizedIgnore = ignoreWords
+        .map(normalizeToken)
+        .where((t) => t.isNotEmpty)
+        .toSet();
+    final ignoredPhraseParts = ignoreWords
+        .map(normalizeToken)
+        .where((e) => e.contains(' '))
+        .toList();
+
+    final tokens = <SpeakingWordToken>[];
+
+    for (var i = 0; i < rawTokens.length; i++) {
+      final raw = rawTokens[i];
+      final normalized = normalizeToken(raw);
+      if (normalized.isEmpty) continue;
+
+      final phonetic = (i < rawPhoneticTokens.length) ? rawPhoneticTokens[i] : null;
+
+      tokens.add(
+        SpeakingWordToken(
+          raw: raw,
+          normalized: normalized,
+          ignored: normalizedIgnore.contains(normalized),
+          phonetic: phonetic,
+        ),
+      );
+    }
+
+    if (ignoredPhraseParts.isNotEmpty) {
+      for (final phrase in ignoredPhraseParts) {
+        final phraseWords = phrase.split(' ');
+        for (var i = 0; i + phraseWords.length <= tokens.length; i++) {
+          var matchesPhrase = true;
+          for (var k = 0; k < phraseWords.length; k++) {
+            if (tokens[i + k].normalized != phraseWords[k]) {
+              matchesPhrase = false;
+              break;
+            }
+          }
+          if (matchesPhrase) {
+            for (var j = 0; j < phraseWords.length; j++) {
+              tokens[i + j] = SpeakingWordToken(
+                raw: tokens[i + j].raw,
+                normalized: tokens[i + j].normalized,
+                ignored: true,
+                phonetic: tokens[i + j].phonetic,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    return List.unmodifiable(tokens);
+  }
+
+  static int levenshtein(String a, String b) {
+    if (a == b) return 0;
+    if (a.isEmpty) return b.length;
+    if (b.isEmpty) return a.length;
+    final rows = a.length + 1;
+    final cols = b.length + 1;
+    final d = List<List<int>>.generate(rows, (_) => List<int>.filled(cols, 0));
+    for (var i = 0; i < rows; i++) { d[i][0] = i; }
+    for (var j = 0; j < cols; j++) { d[0][j] = j; }
+    for (var i = 1; i < rows; i++) {
+      for (var j = 1; j < cols; j++) {
+        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
+        d[i][j] = [d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost]
+            .reduce((min, v) => v < min ? v : min);
+      }
+    }
+    return d[a.length][b.length];
+  }
 
   SpeakingSentenceAnalysis analyzeSentence(
     int sentenceIndex,

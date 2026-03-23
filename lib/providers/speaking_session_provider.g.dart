@@ -7,7 +7,7 @@ part of 'speaking_session_provider.dart';
 // **************************************************************************
 
 String _$speakingSessionNotifierHash() =>
-    r'aca867dd6c370794a86ac45ffa567a5c1cfb38cf';
+    r'7c6df2f1e973f62a8ce8b3465c1b3dd0e8f43e96';
 
 /// Copied from Dart SDK
 class _SystemHash {

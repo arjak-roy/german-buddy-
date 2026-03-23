@@ -15,6 +15,7 @@ class SpeakingExercise {
   final String? prompt;
   final List<String>? usefulPhrases;
   final String? spokenName;
+  final List<String>? phoneticScript; // IPA for each sentence
 
   const SpeakingExercise({
     required this.id,
@@ -27,6 +28,7 @@ class SpeakingExercise {
     this.prompt,
     this.usefulPhrases,
     this.spokenName,
+    this.phoneticScript,
   });
 }
 
@@ -34,11 +36,13 @@ class SpeakingWordToken {
   final String raw;
   final String normalized;
   final bool ignored;
+  final String? phonetic; // Optional phonetic target for this word
 
   const SpeakingWordToken({
     required this.raw,
     required this.normalized,
     required this.ignored,
+    this.phonetic,
   });
 }
 
@@ -47,15 +51,17 @@ class SpeakingWordAnalysis {
   final bool matched;
   final double confidence;
   final String translation;
+  final double phoneticScore; // Articulation clarity (0.0 - 1.0)
 
   const SpeakingWordAnalysis({
     required this.target,
     required this.matched,
     required this.confidence,
     required this.translation,
+    this.phoneticScore = 0.0,
   });
 
-  double get score => matched ? confidence : 0.0;
+  double get score => matched ? ((confidence * 0.4) + (phoneticScore * 0.6)) : 0.0;
 }
 
 class SpeakingSentenceAnalysis {
